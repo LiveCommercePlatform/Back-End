@@ -54,6 +54,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 func AuthMiddleware(requiredRole string) gin.HandlerFunc {
@@ -95,37 +96,56 @@ func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		uid, err := uuid.Parse(claims.UserID)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id in token"})
+			c.Abort()
+			return
+		}
 
-		c.Set("userID", claims.UserID)
+		c.Set("userID", uid)
 		c.Set("role", claims.Role)
 
 		c.Next()
 	}
 }
 
-func GetUserDataFromContext(c *gin.Context) (string, string) {
-	userID := c.GetString("userID")
-	role := c.GetString("role")
-	return userID, role
+func GetUserDataFromContext(c *gin.Context) (uuid.UUID, string) {
+    v, exists := c.Get("userID")
+    if !exists {
+        return uuid.UUID{}, ""
+    }
+    userID, _ := v.(uuid.UUID)
+
+    role := c.GetString("role")
+    return userID, role
 }
+
 
 
 func RequireProfileCompleted() gin.HandlerFunc {
 	return func(c *gin.Context) {
 
-		userID := c.GetString("userID")
-		if userID == "" {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
-			c.Abort()
-			return
-		}
+		v, exists := c.Get("userID")
+        if !exists {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+            c.Abort()
+            return
+        }
 
-		var user models.User
-		if err := database.DB.First(&user, "id = ?", userID).Error; err != nil {
-			c.JSON(http.StatusNotFound, gin.H{"error": "user_not_found"})
-			c.Abort()
-			return
-		}
+        userID, ok := v.(uuid.UUID)
+        if !ok {
+            c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+            c.Abort()
+            return
+        }
+
+        var user models.User
+        if err := database.DB.First(&user, "id = ?", userID).Error; err != nil {
+            c.JSON(http.StatusNotFound, gin.H{"error": "user_not_found"})
+            c.Abort()
+            return
+        }
 
 		missing := []string{}
 
@@ -147,7 +167,7 @@ func RequireProfileCompleted() gin.HandlerFunc {
 
 		if len(missing) > 0 {
 			c.JSON(http.StatusForbidden, gin.H{
-				"error":          "profile_not_completed",
+				"error": "profile_not_completed",
 				"missing_fields": missing,
 			})
 			c.Abort()

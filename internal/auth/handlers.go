@@ -3,63 +3,59 @@ package auth
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"time"
 	"livecommerce/internal/cache"
 	"livecommerce/internal/database"
 	"livecommerce/internal/email"
 	"livecommerce/internal/models"
+	"net/http"
+	"time"
+
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 )
+
+
+
 var ctx = context.Background()
-type SignupInput struct {
-	Name     string `json:"name" binding:"required"`
-	Email    string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required,min=6"`
-}
+const (
+	verifyTTL  = 10 * time.Minute
+	resetTTL   = 10 * time.Minute
+	refreshTTL = 7 * 24 * time.Hour
+)
 
-type VerifyInput struct {
-	Email string `json:"email" binding:"required,email"`
-	Code  string `json:"code" binding:"required,len=6"`
-}
-
-type LoginInput struct {
-	Email string `json:"email" binding:"required,email"`
-	Password string `json:"password" binding:"required"`
-}
-
-
-type ForgotPasswordInput struct {
-	Email string `json:"email" binding:"required,email"`
-}
-
-
-type ResetPasswordInput struct {
-	Email string `json:"email" binding:"required,email"`
-	Code string `json:"code" binding:"required,len=6"`
-	NewPassword string `json:"new_password" binding:"required,min=6"`
-}
-
-
-type ChangePasswordInput struct {
-	CurrentPassword string `json:"current_password" binding:"required"`
-	NewPassword     string `json:"new_password" binding:"required,min=6"`
-}
-
-
-type RefreshInput struct {
-		UserID       string `json:"user_id" binding:"required"`
-		RefreshToken string `json:"refresh_token" binding:"required"`
+func mustGetUserID(c *gin.Context) (uuid.UUID, bool) {
+	v, exists := c.Get("userID")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return uuid.UUID{}, false
 	}
-	
+	uid, ok := v.(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id"})
+		return uuid.UUID{}, false
+	}
+	return uid, true
+}
+func storeRefreshSession(userID uuid.UUID, tokenHash string, expiresAt time.Time) error {
+	rt := models.RefreshToken{
+		TokenHash: tokenHash,
+		UserID:    userID, 
+		ExpiresAt: expiresAt,
+		Revoked:   false,
+	}
+	if err := database.DB.Create(&rt).Error; err != nil {
+		return err
+	}
 
+	return cache.Client.Set(ctx, "refresh:"+tokenHash, userID, time.Until(expiresAt)).Err()
+}
 
-type UpdateProfileInput struct {
-	Name       string `json:"name"`
-	Phone      string `json:"phone"`
-	Address    string `json:"address"`
-	PostalCode string `json:"postal_code"`
+func revokeRefreshSession(tokenHash string) {
+	_ = cache.Client.Del(ctx, "refresh:"+tokenHash).Err()
+	_ = database.DB.Model(&models.RefreshToken{}).
+		Where("token_hash = ?", tokenHash).
+		Update("revoked", true).Error
 }
 
 
@@ -107,10 +103,8 @@ func Signup(c *gin.Context) {
 		return
 	}
 
-	// code := fmt.Sprintf("%06d", rand.Intn(1000000))
 	code := Generate6DigitCode()
-	// verificationCodes[user.Email] = code
-	err = cache.Client.Set(ctx, "verify:"+user.Email, code, 10*time.Minute).Err()
+	err = cache.Client.Set(ctx, "verify:"+user.Email, code, verifyTTL).Err()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store verification code"})
 		return
@@ -118,31 +112,37 @@ func Signup(c *gin.Context) {
 
 	subject := "Verify Your Email"
 	body := fmt.Sprintf("<p>Your verification code is <b>%s</b></p>", code)
-	email.SendEmail(user.Email, subject, body)
+	if err := email.SendEmail(user.Email, subject, body); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to send verification email"})
+		return
+	}
 
-	token, err := GenerateJWT(user.ID.String(), string(user.Role))
+	accessToken, err := GenerateJWT(user.ID.String(), string(user.Role))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
 		return
 	}
-	rawRefresh, hashedRefresh, err :=GenerateRefreshTokenValue()
+
+	rawRefresh, hashedRefresh, err := GenerateRefreshTokenValue()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
 		return
 	}
-
-
-	err = cache.Client.Set(ctx, "refresh:"+user.ID.String(), hashedRefresh, 7*24*time.Hour).Err()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh token"})
+	expiresAt := time.Now().Add(refreshTTL)
+	if err := storeRefreshSession(user.ID, hashedRefresh, expiresAt); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh session"})
 		return
 	}
 
+
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Signup successful. Verification code sent.",
-		"access_token": token,
+		"access_token":  accessToken,
 		"refresh_token": rawRefresh,
 	})
+
+
+
 }
 
 
@@ -163,12 +163,6 @@ func VerifyEmail(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-
-	// expectedCode, exists := verificationCodes[input.Email]
-	// if !exists || expectedCode != input.Code {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid verification code"})
-	// 	return
-	// }
 	storedCode, err := cache.Client.Get(ctx, "verify:"+input.Email).Result()
 	if err != nil {
 	c.JSON(http.StatusBadRequest, gin.H{"error": "Verification code expired or invalid"})
@@ -181,7 +175,7 @@ func VerifyEmail(c *gin.Context) {
 	}
 
 
-	cache.Client.Del(ctx, "verify:"+input.Email)
+	_ = cache.Client.Del(ctx, "verify:"+input.Email).Err()
 	var user models.User
 	if err := database.DB.Where("email = ?", input.Email).First(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -189,7 +183,10 @@ func VerifyEmail(c *gin.Context) {
 	}
 
 	user.Verified = true
-	database.DB.Save(&user)
+	if err := database.DB.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update user"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "Email verified successfully."})
 }
 
@@ -223,7 +220,7 @@ func Login(c *gin.Context) {
 		return
 	}
 
-	token, err := GenerateJWT(user.ID.String(), string(user.Role))
+	accessToken, err := GenerateJWT(user.ID.String(), string(user.Role))
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate token"})
 		return
@@ -235,19 +232,19 @@ func Login(c *gin.Context) {
 		return
 	}
 
-
-	err = cache.Client.Set(ctx, "refresh:"+user.ID.String(), hashedRefresh, 7*24*time.Hour).Err()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh token"})
+	
+	expiresAt := time.Now().Add(refreshTTL)
+	if err := storeRefreshSession(user.ID, hashedRefresh, expiresAt); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh session"})
 		return
 	}
 
-
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Login successful",
-		"access_token": token,
-		"refresh_token": rawRefresh,
+		"access_token":  accessToken,
+		"refresh_token": rawRefresh, 
 	})
+
 }
 
 // ForgotPassword godoc
@@ -272,7 +269,7 @@ func ForgotPassword(c *gin.Context) {
 		return
 	}
 	code := Generate6DigitCode()
-	err := cache.Client.Set(ctx, "reset:"+input.Email, code, 10*time.Minute).Err()
+	err := cache.Client.Set(ctx, "reset:"+input.Email, code, resetTTL).Err()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store reset code"})
 		return
@@ -316,21 +313,28 @@ func ResetPassword(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid reset code"})
 		return
 	}
-	// expectedCode, exists := resetCodes[input.Email]
-	// if !exists || expectedCode != input.Code {
-	// 	c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid reset code"})
-	// 	return
-	// }
+
 	cache.Client.Del(ctx, "reset:"+input.Email)
 	
-	// var user models.User
-	// if err := database.DB.Where("email = ?", input.Email).First(&user).Error; err != nil {
-	// 	c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
-	// 	return
-	// }
 
-	hashedPassword, _ := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
-	database.DB.Model(&models.User{}).Where("email = ?", input.Email).Update("password", string(hashedPassword))	
+
+	hashedPassword, err  := bcrypt.GenerateFromPassword([]byte(input.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to hash password"})
+		return
+	}
+	var user models.User
+	if err := database.DB.Where("email = ?", input.Email).First(&user).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+		return
+	}
+
+	if err := database.DB.Model(&models.User{}).
+		Where("email = ?", input.Email).
+		Update("password", string(hashedPassword)).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update password"})
+		return
+	}	
 
 	c.JSON(http.StatusOK, gin.H{"message": "Password reset successful"})
 }
@@ -349,6 +353,10 @@ func ResetPassword(c *gin.Context) {
 // @Security BearerAuth
 // @Router /auth/change-password [patch]
 func ChangePassword(c *gin.Context) {
+	userID, ok := mustGetUserID(c)
+	if !ok {
+		return
+	}
 
 	var input ChangePasswordInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -356,7 +364,6 @@ func ChangePassword(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("userID")
 	var user models.User
 	if err := database.DB.First(&user, "id = ?", userID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
@@ -396,35 +403,62 @@ func ChangePassword(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Router /auth/refresh [post]
 func RefreshToken(c *gin.Context) {
-
-
 	var input RefreshInput
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	storedToken, err := cache.Client.Get(ctx, "refresh:"+input.UserID).Result()
-	if err != nil || storedToken != input.RefreshToken {
+	oldHashed := HashRefreshToken(input.RefreshToken)
+
+	userIDStr, err := cache.Client.Get(ctx, "refresh:"+oldHashed).Result()
+	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
 		return
 	}
 
+	var rt models.RefreshToken
+	if err := database.DB.Where("token_hash = ? AND revoked = false", oldHashed).First(&rt).Error; err != nil {
+		revokeRefreshSession(oldHashed)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+		return
+	}
+	if time.Now().After(rt.ExpiresAt) {
+		revokeRefreshSession(oldHashed)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token expired"})
+		return
+	}
+
 	var user models.User
-	if err := database.DB.First(&user, "id = ?", input.UserID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+	if err := database.DB.First(&user, "id = ?", userIDStr).Error; err != nil {
+		revokeRefreshSession(oldHashed)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 		return
 	}
 
 	accessToken, err := GenerateJWT(user.ID.String(), string(user.Role))
-
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate access token"})
 		return
 	}
 
+	revokeRefreshSession(oldHashed)
+
+	newRaw, newHashed, err := GenerateRefreshTokenValue()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate refresh token"})
+		return
+	}
+
+	expiresAt := time.Now().Add(refreshTTL)
+	if err := storeRefreshSession(user.ID, newHashed, expiresAt); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh session"})
+		return
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": accessToken,
+		"access_token":  accessToken,
+		"refresh_token": newRaw,
 	})
 }
 
@@ -440,27 +474,16 @@ func RefreshToken(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /auth/logout [post]
 func Logout(c *gin.Context) {
-	claims, exists := c.Get("claims")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Unauthorized"})
-		return
-	}
+    var input LogoutInput
+    if err := c.ShouldBindJSON(&input); err != nil {
+        c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+        return
+    }
 
-	userClaims, ok := claims.(*Claims)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
-		return
-	}
+	hashed := HashRefreshToken(input.RefreshToken)
+	revokeRefreshSession(hashed)
 
-	userID := userClaims.UserID
-
-	err := cache.Client.Del(ctx, "refresh:"+userID).Err()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete refresh token"})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
+    c.JSON(http.StatusOK, gin.H{"message": "Logged out successfully"})
 }
 
 
@@ -475,7 +498,10 @@ func Logout(c *gin.Context) {
 // @Failure 500 {object} map[string]string
 // @Router /profile/get [get]
 func GetProfile(c *gin.Context) {
-	userID, _ := c.Get("userID")
+	userID, ok := mustGetUserID(c)
+	if !ok {
+		return
+	}
 
 	var user models.User
 	if err := database.DB.First(&user, "id = ?", userID).Error; err != nil {
@@ -501,7 +527,10 @@ func GetProfile(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Router /profile/update [put]
 func UpdateProfile(c *gin.Context) {
-	userID, _ := c.Get("userID")
+	userID, ok := mustGetUserID(c)
+	if !ok {
+		return
+	}
 
 	var input UpdateProfileInput
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -520,7 +549,10 @@ func UpdateProfile(c *gin.Context) {
 	user.Address = input.Address
 	user.PostalCode = input.PostalCode
 
-	database.DB.Save(&user)
+	if err := database.DB.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to update profile"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Profile updated successfully"})
 }
@@ -564,7 +596,10 @@ func GetUserByID(c *gin.Context) {
 // @Router /profile/completed [get]
 func ProfileCompleted(c *gin.Context) {
 
-	userID, _ := c.Get("userID")
+	userID, ok := mustGetUserID(c)
+	if !ok {
+		return
+	}
 
 	var user models.User
 	if err := database.DB.First(&user, "id = ?", userID).Error; err != nil {
