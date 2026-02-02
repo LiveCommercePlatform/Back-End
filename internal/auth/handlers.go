@@ -139,6 +139,8 @@ func Signup(c *gin.Context) {
 		"message": "Signup successful. Verification code sent.",
 		"access_token":  accessToken,
 		"refresh_token": rawRefresh,
+		"user_id":       user.ID.String(),
+		"role":          string(user.Role),
 	})
 
 
@@ -243,6 +245,8 @@ func Login(c *gin.Context) {
 		"message": "Login successful",
 		"access_token":  accessToken,
 		"refresh_token": rawRefresh, 
+		"user_id":       user.ID.String(),
+		"role":          string(user.Role),
 	})
 
 }
@@ -411,11 +415,11 @@ func RefreshToken(c *gin.Context) {
 
 	oldHashed := HashRefreshToken(input.RefreshToken)
 
-	userIDStr, err := cache.Client.Get(ctx, "refresh:"+oldHashed).Result()
-	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
-		return
-	}
+	// userIDStr, err := cache.Client.Get(ctx, "refresh:"+oldHashed).Result()
+	// if err != nil {
+	// 	c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid refresh token"})
+	// 	return
+	// }
 
 	var rt models.RefreshToken
 	if err := database.DB.Where("token_hash = ? AND revoked = false", oldHashed).First(&rt).Error; err != nil {
@@ -428,13 +432,21 @@ func RefreshToken(c *gin.Context) {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh token expired"})
 		return
 	}
+	_, err := cache.Client.Get(ctx, "refresh:"+oldHashed).Result()
+	if err != nil {
+		revokeRefreshSession(oldHashed) // هماهنگی DB/Redis
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Refresh session expired"})
+		return
+	}
 
 	var user models.User
-	if err := database.DB.First(&user, "id = ?", userIDStr).Error; err != nil {
+	if err := database.DB.First(&user, "id = ?", rt.UserID).Error; err != nil {
 		revokeRefreshSession(oldHashed)
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
 		return
 	}
+
+	// revokeRefreshSession(oldHashed)
 
 	accessToken, err := GenerateJWT(user.ID.String(), string(user.Role))
 	if err != nil {
@@ -442,7 +454,7 @@ func RefreshToken(c *gin.Context) {
 		return
 	}
 
-	revokeRefreshSession(oldHashed)
+	// revokeRefreshSession(oldHashed)
 
 	newRaw, newHashed, err := GenerateRefreshTokenValue()
 	if err != nil {
@@ -455,7 +467,7 @@ func RefreshToken(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to store refresh session"})
 		return
 	}
-
+	revokeRefreshSession(oldHashed)
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
 		"refresh_token": newRaw,
