@@ -32,11 +32,8 @@ definitions:
     properties:
       refresh_token:
         type: string
-      user_id:
-        type: string
     required:
     - refresh_token
-    - user_id
     type: object
   auth.ResetPasswordInput:
     properties:
@@ -86,6 +83,377 @@ definitions:
     required:
     - code
     - email
+    type: object
+  models.Category:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/models.Category'
+        type: array
+      created_at:
+        type: string
+      id:
+        type: integer
+      key:
+        type: string
+      name_fa:
+        type: string
+      parent:
+        $ref: '#/definitions/models.Category'
+      parent_id:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  models.Comment:
+    properties:
+      content:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      product_id:
+        type: string
+      user:
+        $ref: '#/definitions/models.User'
+      user_id:
+        type: string
+    type: object
+  models.MediaType:
+    enum:
+    - image
+    - video
+    type: string
+    x-enum-varnames:
+    - MediaImage
+    - MediaVideo
+  models.Product:
+    properties:
+      category:
+        $ref: '#/definitions/models.Category'
+      category_id:
+        type: integer
+      comments:
+        items:
+          $ref: '#/definitions/models.Comment'
+        type: array
+      created_at:
+        type: string
+      description:
+        type: string
+      dislike_count:
+        type: integer
+      id:
+        type: string
+      like_count:
+        type: integer
+      media:
+        items:
+          $ref: '#/definitions/models.ProductMedia'
+        type: array
+      owner:
+        $ref: '#/definitions/models.User'
+      owner_id:
+        type: string
+      price:
+        description: Slug        string `gorm:"uniqueIndex;not null" json:"slug"`
+        type: integer
+      rating_avg:
+        type: number
+      rating_count:
+        type: integer
+      rating_sum:
+        type: integer
+      reports:
+        items:
+          $ref: '#/definitions/models.ProductReport'
+        type: array
+      stock:
+        type: integer
+      tags:
+        items:
+          $ref: '#/definitions/models.Tag'
+        type: array
+      title:
+        type: string
+      updated_at:
+        type: string
+      view_count:
+        type: integer
+    type: object
+  models.ProductMedia:
+    properties:
+      id:
+        type: integer
+      product_id:
+        type: string
+      type:
+        $ref: '#/definitions/models.MediaType'
+      url:
+        type: string
+    type: object
+  models.ProductReport:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: integer
+      productID:
+        type: string
+      reason:
+        type: string
+      userID:
+        type: string
+    type: object
+  models.Role:
+    enum:
+    - admin
+    - user
+    type: string
+    x-enum-varnames:
+    - RoleAdmin
+    - RoleUser
+  models.Tag:
+    properties:
+      id:
+        type: integer
+      name:
+        type: string
+    type: object
+  models.User:
+    properties:
+      address:
+        type: string
+      created_at:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      phone:
+        type: string
+      postal_code:
+        type: string
+      role:
+        $ref: '#/definitions/models.Role'
+      updated_at:
+        type: string
+      verified:
+        type: boolean
+    type: object
+  product.CategoryNode:
+    properties:
+      children:
+        items:
+          $ref: '#/definitions/product.CategoryNode'
+        type: array
+      id:
+        type: integer
+      key:
+        type: string
+      name_fa:
+        type: string
+      parent_id:
+        type: integer
+    type: object
+  product.CategoryTreeResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/product.CategoryNode'
+        type: array
+    type: object
+  product.CommentResponseDTO:
+    properties:
+      content:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      user:
+        $ref: '#/definitions/product.CommentUserDTO'
+    type: object
+  product.CommentUserDTO:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  product.CreateCommentInput:
+    properties:
+      content:
+        type: string
+    required:
+    - content
+    type: object
+  product.CreateProductInput:
+    properties:
+      category_id:
+        type: integer
+      description:
+        type: string
+      price:
+        type: integer
+      stock:
+        minimum: 0
+        type: integer
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        maxLength: 200
+        minLength: 2
+        type: string
+    required:
+    - category_id
+    - price
+    - title
+    type: object
+  product.MyEngagementDTO:
+    properties:
+      disliked:
+        type: boolean
+      liked:
+        type: boolean
+    type: object
+  product.MyRatingResponse:
+    properties:
+      my_rating:
+        type: integer
+    type: object
+  product.PaginatedCommentsResponseDTO:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/product.CommentResponseDTO'
+        type: array
+      pagination:
+        $ref: '#/definitions/product.PaginationMetaDTO'
+    type: object
+  product.PaginationMetaDTO:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+      total_pages:
+        type: integer
+    type: object
+  product.ProductListItemDTO:
+    properties:
+      category_id:
+        type: integer
+      category_name_fa:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      like_count:
+        type: integer
+      owner_id:
+        type: string
+      owner_name:
+        type: string
+      price:
+        type: integer
+      stock:
+        type: integer
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        type: string
+      view_count:
+        type: integer
+    type: object
+  product.ProductSearchResponseDTO:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/product.ProductListItemDTO'
+        type: array
+      pagination:
+        $ref: '#/definitions/product.PaginationMetaDTO'
+    type: object
+  product.ProductStatsDTO:
+    properties:
+      dislikes:
+        type: integer
+      engagement:
+        type: integer
+      likes:
+        type: integer
+      views:
+        type: integer
+    type: object
+  product.RatingSummaryResponse:
+    properties:
+      breakdown:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      rating_avg:
+        type: number
+      rating_count:
+        type: integer
+    type: object
+  product.RatingUpsertResponse:
+    properties:
+      my_rating:
+        type: integer
+      product_id:
+        type: string
+      rating_avg:
+        type: number
+      rating_count:
+        type: integer
+    type: object
+  product.UpdateCommentInput:
+    properties:
+      content:
+        maxLength: 2000
+        minLength: 1
+        type: string
+    required:
+    - content
+    type: object
+  product.UpdateProductInput:
+    properties:
+      category_id:
+        type: integer
+      description:
+        type: string
+      price:
+        type: integer
+      stock:
+        minimum: 0
+        type: integer
+      tags:
+        items:
+          type: string
+        type: array
+      title:
+        maxLength: 200
+        minLength: 2
+        type: string
+    type: object
+  product.UpsertRatingInput:
+    properties:
+      rating:
+        type: integer
+    required:
+    - rating
     type: object
 host: localhost:8080
 info:
@@ -378,6 +746,1152 @@ paths:
       summary: Verify user's email
       tags:
       - Authentication
+  /categories/tree:
+    get:
+      description: Returns the full category tree (all levels) as nested children.
+        Root categories have parent_id = null.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.CategoryTreeResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get categories tree (full depth)
+      tags:
+      - categories
+  /comments/{id}:
+    delete:
+      description: Deletes a comment based on its ID. Only the comment owner or an
+        admin can perform this action.
+      parameters:
+      - description: Comment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete a comment
+      tags:
+      - comments
+    put:
+      consumes:
+      - application/json
+      description: Updates an existing comment. Only the comment owner or an admin
+        can perform this action.
+      parameters:
+      - description: Comment ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Comment content
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/product.UpdateCommentInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Comment'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a comment
+      tags:
+      - comments
+  /media/{id}:
+    delete:
+      description: Deletes a media file by ID. Only the product owner can delete media.
+      parameters:
+      - description: Media ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete media
+      tags:
+      - media
+  /products:
+    get:
+      description: Search/filter products by query params with pagination.
+      parameters:
+      - description: Search in title/description
+        in: query
+        name: q
+        type: string
+      - description: Category id
+        in: query
+        name: category_id
+        type: integer
+      - description: Min price
+        in: query
+        name: min_price
+        type: integer
+      - description: Max price
+        in: query
+        name: max_price
+        type: integer
+      - description: Comma-separated tags (e.g. apple,iphone)
+        in: query
+        name: tags
+        type: string
+      - description: Owner id (UUID)
+        in: query
+        name: owner_id
+        type: string
+      - description: Only stock>0
+        in: query
+        name: in_stock
+        type: boolean
+      - description: newest|price_asc|price_desc|views|likes
+        in: query
+        name: sort
+        type: string
+      - description: default 1
+        in: query
+        name: page
+        type: integer
+      - description: default 20, max 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.ProductSearchResponseDTO'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Search products
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Create a new product. Category must exist and must be a leaf category.
+        Tags are strings; backend will normalize and get-or-create.
+      parameters:
+      - description: Create product input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/product.CreateProductInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create product
+      tags:
+      - products
+  /products/{id}:
+    delete:
+      description: Delete a product by id (UUID). Only owner or admin can delete.
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete product
+      tags:
+      - products
+    get:
+      description: Get product details by UUID. Increments view_count only when requester
+        is NOT admin and NOT the product owner. If unauthenticated, view_count increments.
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get product by id
+      tags:
+      - products
+    put:
+      consumes:
+      - application/json
+      description: Update product fields by id (UUID). Only product owner or admin
+        can update. If tags is provided, tags will be replaced fully; if omitted,
+        tags remain unchanged. Category must be a leaf category if provided.
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update product input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/product.UpdateProductInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Product'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update product
+      tags:
+      - products
+  /products/{id}/comments:
+    get:
+      description: Get comments for a product with pagination
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Number of comments (default 20, max 50)
+        in: query
+        name: limit
+        type: integer
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.PaginatedCommentsResponseDTO'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get product comments
+      tags:
+      - products
+    post:
+      consumes:
+      - application/json
+      description: Adds a new comment to a specific product by product id (UUID).
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Comment content
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/product.CreateCommentInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Comment'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Add a comment to a product
+      tags:
+      - comments
+  /products/{id}/dislike:
+    delete:
+      description: Remove dislike (removes user from dislikes set)
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Undislike a product
+      tags:
+      - engagement
+    post:
+      description: Dislike a product (adds user to dislikes set). If user had liked,
+        it will be removed.
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Dislike a product
+      tags:
+      - engagement
+  /products/{id}/engagement/me:
+    get:
+      description: Returns whether the current authenticated user has liked or disliked
+        the product.
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.MyEngagementDTO'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get my engagement for a product
+      tags:
+      - engagement
+  /products/{id}/like:
+    delete:
+      description: Remove like (removes user from likes set)
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Unlike a product
+      tags:
+      - engagement
+    post:
+      description: Like a product (adds user to likes set). If user had disliked,
+        it will be removed.
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Like a product
+      tags:
+      - engagement
+  /products/{id}/media:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Uploads an image or video file to a product. Only the product owner
+        can upload media.
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Media file (image or video)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.ProductMedia'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upload media (image or video) to a product
+      tags:
+      - media
+  /products/{id}/rating:
+    delete:
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.RatingUpsertResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete my rating for a product
+      tags:
+      - ratings
+    post:
+      consumes:
+      - application/json
+      description: Create or update current user's rating for a product (stored in
+        Redis).
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Rating input
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/product.UpsertRatingInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.RatingUpsertResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Upsert product rating (1..5)
+      tags:
+      - ratings
+  /products/{id}/rating/me:
+    get:
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.MyRatingResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get my rating for a product
+      tags:
+      - ratings
+  /products/{id}/rating/summary:
+    get:
+      description: Returns avg/count and breakdown(1..5) from Redis.
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.RatingSummaryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get product rating summary
+      tags:
+      - ratings
+  /products/{id}/stats:
+    get:
+      description: Retrieve likes, dislikes, views, and engagement count for a product
+      parameters:
+      - description: Product id (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.ProductStatsDTO'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get product engagement statistics
+      tags:
+      - statistics
+  /profile/{owner_id}/products:
+    get:
+      description: Get paginated products for an owner (public).
+      parameters:
+      - description: Owner id (UUID)
+        in: path
+        name: owner_id
+        required: true
+        type: string
+      - description: Search in title/description
+        in: query
+        name: q
+        type: string
+      - description: Category id
+        in: query
+        name: category_id
+        type: integer
+      - description: Min price
+        in: query
+        name: min_price
+        type: integer
+      - description: Max price
+        in: query
+        name: max_price
+        type: integer
+      - description: Comma-separated tags
+        in: query
+        name: tags
+        type: string
+      - description: Only stock>0
+        in: query
+        name: in_stock
+        type: boolean
+      - description: newest|price_asc|price_desc|views|likes
+        in: query
+        name: sort
+        type: string
+      - description: default 1
+        in: query
+        name: page
+        type: integer
+      - description: default 20, max 50
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/product.ProductSearchResponseDTO'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get owner products
+      tags:
+      - products
   /profile/completed:
     get:
       description: Returns whether the authenticated user's profile is completed
