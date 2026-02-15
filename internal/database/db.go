@@ -18,6 +18,10 @@ func Connect() {
         log.Fatal("❌ Failed to connect to database:", err)
     }
 
+	if err := DB.Exec("PRAGMA foreign_keys = ON;").Error; err != nil {
+		log.Fatal("❌ Failed to enable foreign keys:", err)
+	}
+
     fmt.Println("✅ SQLite database connected successfully")
 }
 

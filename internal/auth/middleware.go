@@ -1,46 +1,4 @@
-// package auth
 
-// import (
-// 	"net/http"
-// 	"os"
-// 	"strings"
-// 	"fmt"
-// 	"github.com/gin-gonic/gin"
-// 	"github.com/golang-jwt/jwt/v5"
-// )
-
-// func AuthMiddleware() gin.HandlerFunc {
-// 	return func(c *gin.Context) {
-// 		tokenStr := strings.TrimPrefix(c.GetHeader("Authorization"), "Bearer ")
-// 		if tokenStr == "" {
-// 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Missing token"})
-// 			return
-// 		}
-
-// 		claims := &Claims{}
-// 		secret := []byte(os.Getenv("JWT_SECRET"))
-
-// 		keyFunc := func(token *jwt.Token) (interface{}, error) {
-// 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-// 				return nil, fmt.Errorf("unexpected signing method")
-// 			}
-// 			return secret, nil
-// 		}
-
-// 		parser := jwt.NewParser(
-// 			jwt.WithValidMethods([]string{"HS256"}),
-// 		)
-
-// 		_, err := parser.ParseWithClaims(tokenStr, claims, keyFunc)
-// 		if err != nil {
-// 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
-// 			return
-// 		}
-
-// 		c.Set("claims", claims)
-// 		c.Next()
-// 	}
-// }
 
 package auth
 
@@ -109,6 +67,56 @@ func AuthMiddleware(requiredRole string) gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+
+
+
+func OptionalAuthMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		authHeader := c.GetHeader("Authorization")
+
+		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			c.Next()
+			return
+		}
+
+		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
+		secret := []byte(os.Getenv("JWT_SECRET"))
+
+		claims := &Claims{} 
+
+		parser := jwt.NewParser(jwt.WithValidMethods([]string{"HS256"}))
+
+		keyFunc := func(t *jwt.Token) (interface{}, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secret, nil
+		}
+
+		_, err := parser.ParseWithClaims(tokenString, claims, keyFunc)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.Abort()
+			return
+		}
+
+		uid, err := uuid.Parse(claims.UserID)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id in token"})
+			c.Abort()
+			return
+		}
+
+		c.Set("userID", uid)
+		c.Set("role", claims.Role)
+
+		c.Next()
+	}
+}
+
+
+
 
 func GetUserDataFromContext(c *gin.Context) (uuid.UUID, string) {
     v, exists := c.Get("userID")
