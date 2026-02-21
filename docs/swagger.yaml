@@ -128,60 +128,6 @@ definitions:
     x-enum-varnames:
     - MediaImage
     - MediaVideo
-  models.Product:
-    properties:
-      category:
-        $ref: '#/definitions/models.Category'
-      category_id:
-        type: integer
-      comments:
-        items:
-          $ref: '#/definitions/models.Comment'
-        type: array
-      created_at:
-        type: string
-      description:
-        type: string
-      dislike_count:
-        type: integer
-      id:
-        type: string
-      like_count:
-        type: integer
-      media:
-        items:
-          $ref: '#/definitions/models.ProductMedia'
-        type: array
-      owner:
-        $ref: '#/definitions/models.User'
-      owner_id:
-        type: string
-      price:
-        description: Slug        string `gorm:"uniqueIndex;not null" json:"slug"`
-        type: integer
-      rating_avg:
-        type: number
-      rating_count:
-        type: integer
-      rating_sum:
-        type: integer
-      reports:
-        items:
-          $ref: '#/definitions/models.ProductReport'
-        type: array
-      stock:
-        type: integer
-      tags:
-        items:
-          $ref: '#/definitions/models.Tag'
-        type: array
-      title:
-        type: string
-      updated_at:
-        type: string
-      view_count:
-        type: integer
-    type: object
   models.ProductMedia:
     properties:
       id:
@@ -295,6 +241,9 @@ definitions:
     properties:
       category_id:
         type: integer
+      cover_image:
+        maxLength: 500
+        type: string
       description:
         type: string
       price:
@@ -326,6 +275,13 @@ definitions:
     properties:
       my_rating:
         type: integer
+    type: object
+  product.OwnerPublicDTO:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
     type: object
   product.PaginatedCommentsResponseDTO:
     properties:
@@ -372,6 +328,61 @@ definitions:
           type: string
         type: array
       title:
+        type: string
+      view_count:
+        type: integer
+    type: object
+  product.ProductResponseDTO:
+    properties:
+      category:
+        $ref: '#/definitions/models.Category'
+      category_id:
+        type: integer
+      comments:
+        items:
+          $ref: '#/definitions/models.Comment'
+        type: array
+      cover_image:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      dislike_count:
+        type: integer
+      id:
+        type: string
+      like_count:
+        type: integer
+      media:
+        items:
+          $ref: '#/definitions/models.ProductMedia'
+        type: array
+      owner:
+        $ref: '#/definitions/product.OwnerPublicDTO'
+      owner_id:
+        type: string
+      price:
+        type: integer
+      rating_avg:
+        type: number
+      rating_count:
+        type: integer
+      rating_sum:
+        type: integer
+      reports:
+        items:
+          $ref: '#/definitions/models.ProductReport'
+        type: array
+      stock:
+        type: integer
+      tags:
+        items:
+          $ref: '#/definitions/models.Tag'
+        type: array
+      title:
+        type: string
+      updated_at:
         type: string
       view_count:
         type: integer
@@ -432,6 +443,9 @@ definitions:
     properties:
       category_id:
         type: integer
+      cover_image:
+        maxLength: 500
+        type: string
       description:
         type: string
       price:
@@ -1016,7 +1030,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/models.Product'
+            $ref: '#/definitions/product.ProductResponseDTO'
         "400":
           description: Bad Request
           schema:
@@ -1108,7 +1122,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Product'
+            $ref: '#/definitions/product.ProductResponseDTO'
         "400":
           description: Bad Request
           schema:
@@ -1154,7 +1168,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Product'
+            $ref: '#/definitions/product.ProductResponseDTO'
         "400":
           description: Bad Request
           schema:

@@ -15,6 +15,7 @@ type Product struct {
 
 	Title       string `gorm:"not null" json:"title"`
 	Description string `gorm:"type:text" json:"description"`
+	CoverImage string `gorm:"size:500" json:"cover_image,omitempty"`
 	// Slug        string `gorm:"uniqueIndex;not null" json:"slug"`
 	Price       int64  `gorm:"not null" json:"price"`
 

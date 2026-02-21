@@ -343,35 +343,33 @@ func GetProductStatisticsByID(c *gin.Context) {
 		return
 	}
 
-	likesCount := int64(0)
-	dislikesCount := int64(0)
+	likesDelta := int64(0)
+	dislikesDelta := int64(0)
 
-	if len(meta) >= 2 && (meta[0] != nil || meta[1] != nil) {
+	if len(meta) >= 2 {
 		if meta[0] != nil {
-			likesCount, _ = strconv.ParseInt(fmt.Sprint(meta[0]), 10, 64)
+			likesDelta, _ = strconv.ParseInt(fmt.Sprint(meta[0]), 10, 64)
 		}
 		if meta[1] != nil {
-			dislikesCount, _ = strconv.ParseInt(fmt.Sprint(meta[1]), 10, 64)
+			dislikesDelta, _ = strconv.ParseInt(fmt.Sprint(meta[1]), 10, 64)
 		}
-	} else {
-		// fallback برای اینکه اگر meta هنوز ساخته نشده بود، سیستم نخوابه
-		likesCount, _ = cache.Client.SCard(ctx, likesKey(p.ID)).Result()
-		dislikesCount, _ = cache.Client.SCard(ctx, dislikesKey(p.ID)).Result()
 	}
+
+	// ✅ DB + Delta
+	likesTotal := p.LikeCount + likesDelta
+	dislikesTotal := p.DislikeCount + dislikesDelta
 
 	viewDelta, err := cache.Client.Get(ctx, viewsKey(p.ID)).Int64()
 	if err != nil {
 		viewDelta = 0
 	}
-
 	viewsTotal := p.ViewCount + viewDelta
-	engagement := likesCount + dislikesCount
 
 	c.JSON(http.StatusOK, ProductStatsDTO{
-		Likes:      likesCount,
-		Dislikes:   dislikesCount,
+		Likes:      likesTotal,
+		Dislikes:   dislikesTotal,
 		Views:      viewsTotal,
-		Engagement: engagement,
+		Engagement: likesTotal + dislikesTotal,
 	})
 }
 

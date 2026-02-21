@@ -1,6 +1,11 @@
 package product
 
-import "time"
+import (
+	"livecommerce/internal/models"
+	"time"
+
+	"github.com/google/uuid"
+)
 
 type CreateProductInput struct {
 	Title       string   `json:"title" binding:"required,min=2,max=200"`
@@ -8,6 +13,7 @@ type CreateProductInput struct {
 	Price       int64    `json:"price" binding:"required,gt=0"`
 	Stock       int      `json:"stock" binding:"gte=0"`
 	CategoryID  uint     `json:"category_id" binding:"required,gt=0"`
+	CoverImage string `json:"cover_image" binding:"omitempty,max=500"`
 	Tags        []string `json:"tags"`
 }
 
@@ -17,6 +23,7 @@ type UpdateProductInput struct {
 	Price       *int64    `json:"price" binding:"omitempty,gt=0"`
 	Stock       *int      `json:"stock" binding:"omitempty,gte=0"`
 	CategoryID  *uint     `json:"category_id" binding:"omitempty,gt=0"`
+	CoverImage *string `json:"cover_image" binding:"omitempty,max=500"`
 	Tags        *[]string `json:"tags"`
 }
 
@@ -126,4 +133,92 @@ type RatingUpsertResponse struct {
 	MyRating    int     `json:"my_rating"`
 	RatingAvg   float64 `json:"rating_avg"`
 	RatingCount int64   `json:"rating_count"`
+}
+
+
+type OwnerPublicDTO struct {
+	ID   uuid.UUID `json:"id"`
+	Name string    `json:"name"`
+}
+
+type ProductResponseDTO struct {
+	ID          uuid.UUID `json:"id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description,omitempty"`
+	Price       int64     `json:"price"`
+	Stock       int       `json:"stock"`
+	CoverImage string `json:"cover_image,omitempty"`
+
+	OwnerID uuid.UUID       `json:"owner_id"`
+	Owner   *OwnerPublicDTO `json:"owner,omitempty"`
+
+	ViewCount    int64   `json:"view_count"`
+	LikeCount    int64   `json:"like_count"`
+	DislikeCount int64   `json:"dislike_count"`
+	RatingCount  int64   `json:"rating_count"`
+	RatingSum    int64   `json:"rating_sum"`
+	RatingAvg    float64 `json:"rating_avg"`
+
+	CategoryID uint             `json:"category_id"`
+	Category   *models.Category `json:"category,omitempty"`
+
+	Tags []models.Tag `json:"tags,omitempty"`
+
+	Media    []models.ProductMedia  `json:"media,omitempty"`
+	Comments []models.Comment       `json:"comments,omitempty"`
+	Reports  []models.ProductReport `json:"reports,omitempty"`
+
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+func ToProductResponseDTO(p models.Product) ProductResponseDTO {
+	var owner *OwnerPublicDTO
+	if p.Owner != nil && p.Owner.ID != uuid.Nil {
+		owner = &OwnerPublicDTO{ID: p.Owner.ID, Name: p.Owner.Name}
+	}
+
+	out := ProductResponseDTO{
+		ID:          p.ID,
+		Title:       p.Title,
+		Description: p.Description,
+		Price:       p.Price,
+		Stock:       p.Stock,
+		CoverImage:  p.CoverImage,
+		OwnerID:     p.OwnerID,
+		Owner:       owner,
+
+		ViewCount:    p.ViewCount,
+		LikeCount:    p.LikeCount,
+		DislikeCount: p.DislikeCount,
+		RatingCount:  p.RatingCount,
+		RatingSum:    p.RatingSum,
+		RatingAvg:    p.RatingAvg,
+
+		CategoryID: p.CategoryID,
+		Category:   p.Category,
+		Tags:       p.Tags,
+
+		Media:    p.Media,
+		Comments: p.Comments,
+		Reports:  p.Reports,
+
+		CreatedAt: p.CreatedAt,
+		UpdatedAt: p.UpdatedAt,
+	}
+
+	if len(out.Tags) == 0 {
+		out.Tags = nil
+	}
+	if len(out.Media) == 0 {
+		out.Media = nil
+	}
+	if len(out.Comments) == 0 {
+		out.Comments = nil
+	}
+	if len(out.Reports) == 0 {
+		out.Reports = nil
+	}
+
+	return out
 }

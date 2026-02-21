@@ -108,21 +108,29 @@ func UpsertProductRating(c *gin.Context) {
 	}
 
 	newStr := fmt.Sprint(arr[1])
-	countStr := fmt.Sprint(arr[2])
-	avgStr := fmt.Sprint(arr[4])
+	countDeltaStr := fmt.Sprint(arr[2])
+	sumDeltaStr := fmt.Sprint(arr[3])
 
 	newRating, _ := strconv.Atoi(newStr)
-	count, _ := strconv.ParseInt(countStr, 10, 64)
-	avg, _ := strconv.ParseFloat(avgStr, 64)
+	countDelta, _ := strconv.ParseInt(countDeltaStr, 10, 64)
+	sumDelta, _ := strconv.ParseInt(sumDeltaStr, 10, 64)
 
-	// ✅ TTL refresh
+	// ✅ DB + delta
+	totalCount := p.RatingCount + countDelta
+	totalSum := p.RatingSum + sumDelta
+
+	avg := 0.0
+	if totalCount > 0 {
+		avg = float64(totalSum) / float64(totalCount)
+	}
+
 	expireRatingKeys(p.ID)
 
 	c.JSON(http.StatusOK, RatingUpsertResponse{
 		ProductID:   p.ID.String(),
 		MyRating:    newRating,
 		RatingAvg:   avg,
-		RatingCount: count,
+		RatingCount: totalCount,
 	})
 }
 
@@ -223,20 +231,28 @@ func DeleteProductRating(c *gin.Context) {
 		return
 	}
 
-	countStr := fmt.Sprint(arr[1])
-	avgStr := fmt.Sprint(arr[3])
+	countDeltaStr := fmt.Sprint(arr[1])
+	sumDeltaStr := fmt.Sprint(arr[2])
 
-	count, _ := strconv.ParseInt(countStr, 10, 64)
-	avg, _ := strconv.ParseFloat(avgStr, 64)
+	countDelta, _ := strconv.ParseInt(countDeltaStr, 10, 64)
+	sumDelta, _ := strconv.ParseInt(sumDeltaStr, 10, 64)
 
-	// ✅ TTL refresh
+	totalCount := p.RatingCount + countDelta
+	totalSum := p.RatingSum + sumDelta
+
+	avg := 0.0
+	if totalCount > 0 {
+		avg = float64(totalSum) / float64(totalCount)
+	}
+
+
 	expireRatingKeys(p.ID)
 
 	c.JSON(http.StatusOK, RatingUpsertResponse{
 		ProductID:   p.ID.String(),
 		MyRating:    0,
 		RatingAvg:   avg,
-		RatingCount: count,
+		RatingCount: totalCount,
 	})
 }
 
@@ -268,20 +284,28 @@ func GetProductRatingSummary(c *gin.Context) {
 		return
 	}
 
-	meta, err := cache.Client.HMGet(ctx, ratingMetaKey(p.ID), "avg", "count").Result()
+	meta, err := cache.Client.HMGet(ctx, ratingMetaKey(p.ID), "count", "sum").Result()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch rating meta"})
 		return
 	}
-	avg := 0.0
-	count := int64(0)
+	countDelta := int64(0)
+	sumDelta := int64(0)
 	if len(meta) >= 2 {
 		if meta[0] != nil {
-			avg, _ = strconv.ParseFloat(fmt.Sprint(meta[0]), 64)
+			countDelta, _ = strconv.ParseInt(fmt.Sprint(meta[0]), 10, 64)
 		}
 		if meta[1] != nil {
-			count, _ = strconv.ParseInt(fmt.Sprint(meta[1]), 10, 64)
+			sumDelta, _ = strconv.ParseInt(fmt.Sprint(meta[1]), 10, 64)
 		}
+	}
+
+	totalCount := p.RatingCount + countDelta
+	totalSum := p.RatingSum + sumDelta
+
+	avg := 0.0
+	if totalCount > 0 {
+		avg = float64(totalSum) / float64(totalCount)
 	}
 
 	distRaw, err := cache.Client.HGetAll(ctx, ratingDistKey(p.ID)).Result()
@@ -298,12 +322,11 @@ func GetProductRatingSummary(c *gin.Context) {
 		}
 	}
 
-	// ✅ TTL refresh (اختیاری ولی مفید)
 	expireRatingKeys(p.ID)
 
 	c.JSON(http.StatusOK, RatingSummaryResponse{
 		RatingAvg:   avg,
-		RatingCount: count,
+		RatingCount: totalCount,
 		Breakdown:   breakdown,
 	})
 }
