@@ -48,7 +48,7 @@ func runTicker(ctx context.Context, every time.Duration, fn func()) {
 	t := time.NewTicker(every)
 	defer t.Stop()
 
-	fn() // run once at startup
+	fn()
 
 	for {
 		select {
@@ -60,9 +60,7 @@ func runTicker(ctx context.Context, every time.Duration, fn func()) {
 	}
 }
 
-// ---------------- Views ----------------
-// Redis key: product:{pid}:views (string counter)
-// DB column: products.view_count += delta
+// -------- Views: product:{pid}:views --------
 func SyncViewsOnce(ctx context.Context, batch int64) error {
 	rdb := cache.Client
 	db := database.DB
@@ -80,10 +78,25 @@ func SyncViewsOnce(ctx context.Context, batch int64) error {
 				continue
 			}
 
-			// ✅ Redis server v8.4.0 supports GETDEL => atomic read+delete
-			delta, err := getDelInt64(ctx, rdb, k)
-			if err != nil || delta <= 0 {
+			delta, supported, err := tryGetDelInt64(ctx, rdb, k)
+			if err != nil {
 				continue
+			}
+
+			if !supported {
+				delta, err = rdb.Get(ctx, k).Int64()
+				if err == redis.Nil || delta == 0 {
+					_ = rdb.Del(ctx, k).Err()
+					continue
+				}
+				if err != nil {
+					continue
+				}
+				_ = rdb.Del(ctx, k).Err()
+			} else {
+				if delta == 0 {
+					continue
+				}
 			}
 
 			_ = db.Model(&models.Product{}).
@@ -99,9 +112,25 @@ func SyncViewsOnce(ctx context.Context, batch int64) error {
 	return nil
 }
 
-// ---------------- Engagement meta ----------------
-// Redis key: product:{pid}:engagement:meta (hash: likes_count, dislikes_count)
-// DB columns: like_count, dislike_count
+// ---------- Scripts for atomic get+reset ----------
+
+var getResetEngageDelta = redis.NewScript(`
+local k = KEYS[1]
+local l = tonumber(redis.call("HGET", k, "likes_count") or "0")
+local d = tonumber(redis.call("HGET", k, "dislikes_count") or "0")
+redis.call("HSET", k, "likes_count", 0, "dislikes_count", 0)
+return {l, d}
+`)
+
+var getResetRatingDelta = redis.NewScript(`
+local k = KEYS[1]
+local c = tonumber(redis.call("HGET", k, "count") or "0")
+local s = tonumber(redis.call("HGET", k, "sum") or "0")
+redis.call("HSET", k, "count", 0, "sum", 0)
+return {c, s}
+`)
+
+// -------- Engagement meta: product:{pid}:engagement:meta --------
 func SyncEngagementOnce(ctx context.Context, batch int64) error {
 	rdb := cache.Client
 	db := database.DB
@@ -119,26 +148,29 @@ func SyncEngagementOnce(ctx context.Context, batch int64) error {
 				continue
 			}
 
-			meta, err := rdb.HMGet(ctx, k, "likes_count", "dislikes_count").Result()
+			res, err := getResetEngageDelta.Run(ctx, rdb, []string{k}).Result()
 			if err != nil {
 				continue
 			}
 
-			var likes, dislikes int64
-			if len(meta) >= 2 {
-				if meta[0] != nil {
-					fmt.Sscan(fmt.Sprint(meta[0]), &likes)
-				}
-				if meta[1] != nil {
-					fmt.Sscan(fmt.Sprint(meta[1]), &dislikes)
-				}
+			arr, ok := res.([]interface{})
+			if !ok || len(arr) != 2 {
+				continue
+			}
+
+			var likesDelta, dislikesDelta int64
+			fmt.Sscan(fmt.Sprint(arr[0]), &likesDelta)
+			fmt.Sscan(fmt.Sprint(arr[1]), &dislikesDelta)
+
+			if likesDelta == 0 && dislikesDelta == 0 {
+				continue
 			}
 
 			_ = db.Model(&models.Product{}).
 				Where("id = ?", pid).
 				Updates(map[string]any{
-					"like_count":    likes,
-					"dislike_count": dislikes,
+					"like_count":    gorm.Expr("like_count + ?", likesDelta),
+					"dislike_count": gorm.Expr("dislike_count + ?", dislikesDelta),
 				}).Error
 		}
 
@@ -150,9 +182,7 @@ func SyncEngagementOnce(ctx context.Context, batch int64) error {
 	return nil
 }
 
-// ---------------- Ratings meta ----------------
-// Redis key: product:{pid}:ratings:meta (hash: count, sum, avg)
-// DB columns: rating_count, rating_sum, rating_avg
+// -------- Ratings meta: product:{pid}:ratings:meta --------
 func SyncRatingsOnce(ctx context.Context, batch int64) error {
 	rdb := cache.Client
 	db := database.DB
@@ -170,31 +200,33 @@ func SyncRatingsOnce(ctx context.Context, batch int64) error {
 				continue
 			}
 
-			meta, err := rdb.HMGet(ctx, k, "count", "sum", "avg").Result()
+			res, err := getResetRatingDelta.Run(ctx, rdb, []string{k}).Result()
 			if err != nil {
 				continue
 			}
 
-			var count, sum int64
-			var avg float64
-			if len(meta) >= 3 {
-				if meta[0] != nil {
-					fmt.Sscan(fmt.Sprint(meta[0]), &count)
-				}
-				if meta[1] != nil {
-					fmt.Sscan(fmt.Sprint(meta[1]), &sum)
-				}
-				if meta[2] != nil {
-					fmt.Sscan(fmt.Sprint(meta[2]), &avg)
-				}
+			arr, ok := res.([]interface{})
+			if !ok || len(arr) != 2 {
+				continue
+			}
+
+			var countDelta, sumDelta int64
+			fmt.Sscan(fmt.Sprint(arr[0]), &countDelta)
+			fmt.Sscan(fmt.Sprint(arr[1]), &sumDelta)
+
+			if countDelta == 0 && sumDelta == 0 {
+				continue
 			}
 
 			_ = db.Model(&models.Product{}).
 				Where("id = ?", pid).
 				Updates(map[string]any{
-					"rating_count": count,
-					"rating_sum":   sum,
-					"rating_avg":   avg,
+					"rating_count": gorm.Expr("rating_count + ?", countDelta),
+					"rating_sum":   gorm.Expr("rating_sum + ?", sumDelta),
+					"rating_avg": gorm.Expr(
+						"CASE WHEN (rating_count + ?) > 0 THEN (1.0 * (rating_sum + ?) / (rating_count + ?)) ELSE 0 END",
+						countDelta, sumDelta, countDelta,
+					),
 				}).Error
 		}
 
@@ -206,9 +238,6 @@ func SyncRatingsOnce(ctx context.Context, batch int64) error {
 	return nil
 }
 
-// ---------------- Helpers ----------------
-
-// product:{pid}:...
 func parseProductIDFromKey(k string) (uuid.UUID, bool) {
 	if !strings.HasPrefix(k, "product:") {
 		return uuid.Nil, false
@@ -225,22 +254,27 @@ func parseProductIDFromKey(k string) (uuid.UUID, bool) {
 	return pid, true
 }
 
-// Atomic read+delete: GETDEL key
-func getDelInt64(ctx context.Context, rdb *redis.Client, key string) (int64, error) {
+func tryGetDelInt64(ctx context.Context, rdb *redis.Client, key string) (val int64, supported bool, err error) {
 	res, err := rdb.Do(ctx, "GETDEL", key).Result()
 	if err == redis.Nil {
-		return 0, nil
+		return 0, true, nil
 	}
 	if err != nil {
-		return 0, err
+		msg := err.Error()
+		if strings.Contains(msg, "unknown command") || strings.Contains(msg, "ERR unknown command") {
+			return 0, false, nil
+		}
+		return 0, true, err
 	}
 
 	switch v := res.(type) {
 	case string:
-		return strconv.ParseInt(v, 10, 64)
+		n, e := strconv.ParseInt(v, 10, 64)
+		return n, true, e
 	case []byte:
-		return strconv.ParseInt(string(v), 10, 64)
+		n, e := strconv.ParseInt(string(v), 10, 64)
+		return n, true, e
 	default:
-		return 0, fmt.Errorf("unexpected GETDEL type: %T", res)
+		return 0, true, fmt.Errorf("unexpected GETDEL type: %T", res)
 	}
 }

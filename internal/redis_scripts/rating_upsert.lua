@@ -33,10 +33,10 @@ else
   end
 end
 
-local avg = 0
-if count > 0 then
-  avg = sum / count
-end
-redis.call("HSET", metaKey, "avg", tostring(avg))
+-- local avg = 0
+-- if count > 0 then
+--   avg = sum / count
+-- end
+-- redis.call("HSET", metaKey, "avg", tostring(avg))
 
-return { oldStr or "", tostring(newRating), tostring(count), tostring(sum), tostring(avg) }
+return { oldStr or "", tostring(newRating), tostring(count), tostring(sum) }

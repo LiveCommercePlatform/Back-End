@@ -99,7 +99,7 @@ func findProductByID(tx *gorm.DB, idStr string, preloads ...string) (*models.Pro
 	q := tx.Model(&models.Product{})
 	for _, p := range preloads {
 		switch p {
-		case "OwnerSafe":
+		case "Owner", "OwnerSafe":
 			q = q.Preload("Owner", func(db *gorm.DB) *gorm.DB {
 				return db.Select("id", "name")
 			})

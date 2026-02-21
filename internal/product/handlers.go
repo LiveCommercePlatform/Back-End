@@ -37,7 +37,7 @@ var ctx = context.Background()
 // @Accept json
 // @Produce json
 // @Param input body CreateProductInput true "Create product input"
-// @Success 201 {object} models.Product
+// @Success 201 {object} product.ProductResponseDTO
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -80,6 +80,7 @@ func CreateProduct(c *gin.Context) {
 			Description: strings.TrimSpace(input.Description),
 			Price:       input.Price,
 			Stock:       input.Stock,
+			CoverImage:  strings.TrimSpace(input.CoverImage),
 			OwnerID:     uid,
 			CategoryID:  input.CategoryID,
 			Tags:        tags,
@@ -109,7 +110,7 @@ func CreateProduct(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, product)
+	c.JSON(http.StatusCreated, ToProductResponseDTO(product))
 }
 
 // UpdateProductByID godoc
@@ -120,7 +121,7 @@ func CreateProduct(c *gin.Context) {
 // @Produce json
 // @Param id path string true "Product id (UUID)"
 // @Param input body UpdateProductInput true "Update product input"
-// @Success 200 {object} models.Product
+// @Success 200 {object} product.ProductResponseDTO
 // @Failure 400 {object} map[string]string
 // @Failure 401 {object} map[string]string
 // @Failure 403 {object} map[string]string
@@ -183,6 +184,9 @@ func UpdateProductByID(c *gin.Context) {
 		if input.Stock != nil {
 			product.Stock = *input.Stock
 		}
+		if input.CoverImage != nil {
+			product.CoverImage = strings.TrimSpace(*input.CoverImage)
+		}
 
 		if input.CategoryID != nil {
 			if err := validateLeafCategory(tx, *input.CategoryID); err != nil {
@@ -206,7 +210,6 @@ func UpdateProductByID(c *gin.Context) {
 			}
 		}
 
-		// reload with preloads for response (✅ helper)
 		pp, err := findProductByID(
 			tx,
 			product.ID.String(),
@@ -239,7 +242,7 @@ func UpdateProductByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, product)
+	c.JSON(http.StatusOK, ToProductResponseDTO(product))
 }
 
 
@@ -249,7 +252,7 @@ func UpdateProductByID(c *gin.Context) {
 // @Tags products
 // @Produce json
 // @Param id path string true "Product id (UUID)"
-// @Success 200 {object} models.Product
+// @Success 200 {object} product.ProductResponseDTO
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
@@ -301,7 +304,7 @@ func GetProductByID(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, product)
+	c.JSON(http.StatusOK, ToProductResponseDTO(*product))
 }
 
 

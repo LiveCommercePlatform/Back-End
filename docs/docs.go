@@ -864,7 +864,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.Product"
+                            "$ref": "#/definitions/product.ProductResponseDTO"
                         }
                     },
                     "400": {
@@ -920,7 +920,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Product"
+                            "$ref": "#/definitions/product.ProductResponseDTO"
                         }
                     },
                     "400": {
@@ -991,7 +991,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Product"
+                            "$ref": "#/definitions/product.ProductResponseDTO"
                         }
                     },
                     "400": {
@@ -2574,87 +2574,6 @@ const docTemplate = `{
                 "MediaVideo"
             ]
         },
-        "models.Product": {
-            "type": "object",
-            "properties": {
-                "category": {
-                    "$ref": "#/definitions/models.Category"
-                },
-                "category_id": {
-                    "type": "integer"
-                },
-                "comments": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Comment"
-                    }
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "dislike_count": {
-                    "type": "integer"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "like_count": {
-                    "type": "integer"
-                },
-                "media": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.ProductMedia"
-                    }
-                },
-                "owner": {
-                    "$ref": "#/definitions/models.User"
-                },
-                "owner_id": {
-                    "type": "string"
-                },
-                "price": {
-                    "description": "Slug        string ` + "`" + `gorm:\"uniqueIndex;not null\" json:\"slug\"` + "`" + `",
-                    "type": "integer"
-                },
-                "rating_avg": {
-                    "type": "number"
-                },
-                "rating_count": {
-                    "type": "integer"
-                },
-                "rating_sum": {
-                    "type": "integer"
-                },
-                "reports": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.ProductReport"
-                    }
-                },
-                "stock": {
-                    "type": "integer"
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Tag"
-                    }
-                },
-                "title": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "view_count": {
-                    "type": "integer"
-                }
-            }
-        },
         "models.ProductMedia": {
             "type": "object",
             "properties": {
@@ -2833,6 +2752,10 @@ const docTemplate = `{
                 "category_id": {
                     "type": "integer"
                 },
+                "cover_image": {
+                    "type": "string",
+                    "maxLength": 500
+                },
                 "description": {
                     "type": "string"
                 },
@@ -2872,6 +2795,17 @@ const docTemplate = `{
             "properties": {
                 "my_rating": {
                     "type": "integer"
+                }
+            }
+        },
+        "product.OwnerPublicDTO": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
                 }
             }
         },
@@ -2943,6 +2877,89 @@ const docTemplate = `{
                     }
                 },
                 "title": {
+                    "type": "string"
+                },
+                "view_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "product.ProductResponseDTO": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/models.Category"
+                },
+                "category_id": {
+                    "type": "integer"
+                },
+                "comments": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Comment"
+                    }
+                },
+                "cover_image": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "dislike_count": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "like_count": {
+                    "type": "integer"
+                },
+                "media": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ProductMedia"
+                    }
+                },
+                "owner": {
+                    "$ref": "#/definitions/product.OwnerPublicDTO"
+                },
+                "owner_id": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                },
+                "rating_avg": {
+                    "type": "number"
+                },
+                "rating_count": {
+                    "type": "integer"
+                },
+                "rating_sum": {
+                    "type": "integer"
+                },
+                "reports": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.ProductReport"
+                    }
+                },
+                "stock": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Tag"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "updated_at": {
                     "type": "string"
                 },
                 "view_count": {
@@ -3034,6 +3051,10 @@ const docTemplate = `{
             "properties": {
                 "category_id": {
                     "type": "integer"
+                },
+                "cover_image": {
+                    "type": "string",
+                    "maxLength": 500
                 },
                 "description": {
                     "type": "string"
