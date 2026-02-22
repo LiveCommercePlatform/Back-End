@@ -21,3 +21,13 @@ var RatingUpsert string
 
 //go:embed rating_delete.lua
 var RatingDelete string
+
+//go:embed live_reaction_like.lua
+var LiveReactionlike string
+
+//go:embed live_reaction_dislike.lua
+var LiveReactionDislike string
+
+
+//go:embed live_reaction_clear.lua
+var LiveReactionClear string

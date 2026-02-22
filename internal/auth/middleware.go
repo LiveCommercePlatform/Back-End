@@ -96,15 +96,15 @@ func OptionalAuthMiddleware() gin.HandlerFunc {
 
 		_, err := parser.ParseWithClaims(tokenString, claims, keyFunc)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
-			c.Abort()
+			// c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
+			c.Next()
 			return
 		}
 
 		uid, err := uuid.Parse(claims.UserID)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id in token"})
-			c.Abort()
+			// c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid user id in token"})
+			c.Next()
 			return
 		}
 

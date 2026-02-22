@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"livecommerce/docs"
+	liveRoom "livecommerce/internal/LiveRoom"
 	"livecommerce/internal/auth"
 	"livecommerce/internal/cache"
 	"livecommerce/internal/config"
@@ -49,11 +50,13 @@ func main() {
 		&models.ProductMedia{},
 		&models.Comment{},
 		&models.ProductReport{},
+		&models.LiveRoom{},
+		&models.LiveRoomProduct{},
 	); err != nil {
 		log.Fatal(err)
 	}
 
-	// seed
+	// seed ✅ (bug fix)
 	if err := seed.SeedCategories(); err != nil {
 		log.Fatal(err)
 	}
@@ -81,6 +84,8 @@ func main() {
 
 		authRoutes.POST("/logout", auth.AuthMiddleware(""), auth.Logout)
 		authRoutes.POST("/change-password", auth.AuthMiddleware(""), auth.ChangePassword)
+		authRoutes.POST("/ws-cookie", auth.AuthMiddleware(""), auth.SetWSChatCookie)
+    	authRoutes.POST("/ws-cookie/clear", auth.AuthMiddleware(""), auth.ClearWSChatCookie)
 	}
 
 	// --------------------
@@ -107,62 +112,47 @@ func main() {
 	// --------------------
 	productRoutes := r.Group("/products")
 	{
-		// Create product: نیاز به login + پروفایل کامل
 		productRoutes.POST("",
 			auth.AuthMiddleware(""),
 			auth.RequireProfileCompleted(),
 			product.CreateProduct,
 		)
 
-		// Search products
 		productRoutes.GET("", product.SearchProducts)
 
-		// Get product by id:
-		// ✅ Optional auth برای اینکه مهمان هم ببیند
-		// و اگر admin/owner بود view افزایش پیدا نکند
 		productRoutes.GET("/:id",
 			auth.OptionalAuthMiddleware(),
 			product.GetProductByID,
 		)
 
-		// Update/Delete product (نیاز به login)
 		productRoutes.PUT("/:id", auth.AuthMiddleware(""), product.UpdateProductByID)
 		productRoutes.DELETE("/:id", auth.AuthMiddleware(""), product.DeleteProductByID)
 
-		// Upload media: login + پروفایل کامل
 		productRoutes.POST("/:id/media",
 			auth.AuthMiddleware(""),
 			auth.RequireProfileCompleted(),
 			product.UploadMediaByProductID,
 		)
 
-		// Engagement: نیاز به login
 		productRoutes.POST("/:id/like", auth.AuthMiddleware(""), product.LikeProductByID)
 		productRoutes.DELETE("/:id/like", auth.AuthMiddleware(""), product.UnlikeProductByID)
 		productRoutes.POST("/:id/dislike", auth.AuthMiddleware(""), product.DisLikeProductByID)
 		productRoutes.DELETE("/:id/dislike", auth.AuthMiddleware(""), product.UndislikeProductByID)
 
-		// Stats public
 		productRoutes.GET("/:id/stats", product.GetProductStatisticsByID)
-
-		// Engagement/me protected
 		productRoutes.GET("/:id/engagement/me", auth.AuthMiddleware(""), product.GetMyProductEngagement)
 
-		// Rating:
 		productRoutes.POST("/:id/rating", auth.AuthMiddleware(""), product.UpsertProductRating)
 		productRoutes.DELETE("/:id/rating", auth.AuthMiddleware(""), product.DeleteProductRating)
 		productRoutes.GET("/:id/rating/me", auth.AuthMiddleware(""), product.GetMyProductRating)
 		productRoutes.GET("/:id/rating/summary", product.GetProductRatingSummary)
 
-		// Comments:
 		productRoutes.GET("/:id/comments", product.GetProductCommentsByID)
-
-		// comment create: login (اگه بخوای پروفایل کامل هم می‌تونیم اضافه کنیم)
 		productRoutes.POST("/:id/comments", auth.AuthMiddleware(""), product.CreateComment)
 	}
 
 	// --------------------
-	// Comments: update/delete
+	// Comments
 	// --------------------
 	commentRoutes := r.Group("/comments")
 	{
@@ -171,7 +161,7 @@ func main() {
 	}
 
 	// --------------------
-	// Media delete (اگر در file_handler.go یا file routes داری، اینجا تنظیمش کن)
+	// Media delete
 	// --------------------
 	mediaRoutes := r.Group("/media")
 	{
@@ -179,12 +169,49 @@ func main() {
 	}
 
 	// --------------------
-	// Users: owner products
+	// Users
 	// --------------------
 	userRoutes := r.Group("/users")
 	{
 		userRoutes.GET("/:owner_id/products", product.GetOwnerProducts)
 	}
+
+	// ====================
+	// LiveRoom
+	// ====================
+
+	liveRoom.EventsHub = liveRoom.NewRoomHub()
+
+	r.GET("/ws/live-rooms/:id/events", liveRoom.WSLiveRoomEvents(liveRoom.EventsHub))
+
+	lr := r.Group("/live-rooms")
+	{
+		lr.GET("", liveRoom.ListLiveRooms)
+		lr.GET("/:id", liveRoom.GetLiveRoomByID)
+
+		lr.POST("/:id/view/ping", liveRoom.ViewPing)
+		lr.GET("/:id/stats", liveRoom.LiveRoomStats)
+
+		lr.GET("/:id/reactions/summary", liveRoom.ReactionSummaryHandler)
+		lr.POST("/:id/reactions/like", auth.AuthMiddleware(""), liveRoom.Like)
+		lr.POST("/:id/reactions/dislike", auth.AuthMiddleware(""), liveRoom.Dislike)
+		lr.DELETE("/:id/reactions", auth.AuthMiddleware(""), liveRoom.ClearReaction)
+		lr.GET("/:id/reactions/me", auth.AuthMiddleware(""), liveRoom.MyReaction)
+
+		lr.POST("", auth.AuthMiddleware(""), liveRoom.CreateLiveRoom)
+		lr.PATCH("/:id", auth.AuthMiddleware(""), liveRoom.UpdateLiveRoom)
+		lr.DELETE("/:id", auth.AuthMiddleware(""), liveRoom.DeleteLiveRoom)
+		lr.POST("/:id/start", auth.AuthMiddleware(""), liveRoom.StartLive)
+		lr.POST("/:id/end", auth.AuthMiddleware(""), liveRoom.EndLive)
+
+		lr.GET("/:id/products", liveRoom.ListAttachedProducts)
+
+		lr.POST("/:id/products", auth.AuthMiddleware(""), liveRoom.AttachProducts)
+		lr.DELETE("/:id/products/:productId", auth.AuthMiddleware(""), liveRoom.DetachProduct)
+		lr.PATCH("/:id/products/:productId/pin", auth.AuthMiddleware(""), liveRoom.PinProduct)
+		lr.PATCH("/:id/products/reorder", auth.AuthMiddleware(""), liveRoom.ReorderProducts)
+	}
+
 
 	// --------------------
 	// Start sync + graceful shutdown
