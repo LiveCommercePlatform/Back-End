@@ -345,6 +345,7 @@ func EndLive(c *gin.Context) {
 		return
 	}
 
+	DestroySFURoom(id)
 	c.JSON(http.StatusOK, gin.H{"message": "live_ended"})
 }
 

@@ -74,14 +74,15 @@ func ViewPing(c *gin.Context) {
 
 	key := viewersZKey(roomID)
 
-	if err := cache.Client.ZAdd(c, key, redis.Z{
+	ctx := c.Request.Context()
+
+	if err := cache.Client.ZAdd(ctx, key, redis.Z{
 		Score:  float64(expiresAt),
 		Member: viewerKey,
 	}).Err(); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
 		return
 	}
-
 	cnt, err := getViewerCount(c, roomID, ttlSeconds)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
@@ -237,10 +238,10 @@ func Dislike(c *gin.Context) {
 		return
 	}
 
-		if status != models.LiveLive {
-	c.JSON(http.StatusConflict, gin.H{"error":"live_room_not_live"})
-	return
-	}
+	// 	if status != models.LiveLive {
+	// c.JSON(http.StatusConflict, gin.H{"error":"live_room_not_live"})
+	// return
+	// }
 
 	likeCount, dislikeCount, err := runReactionScript(c, dislikeScript, roomID, uid)
 	if err != nil {
@@ -334,8 +335,9 @@ func ReactionSummaryHandler(c *gin.Context) {
 		return
 	}
 
-	likes, err1 := cache.Client.SCard(c, likesKey(roomID)).Result()
-	dislikes, err2 := cache.Client.SCard(c, dislikesKey(roomID)).Result()
+	ctx := c.Request.Context()
+	likes, err1 := cache.Client.SCard(ctx, likesKey(roomID)).Result()
+	dislikes, err2 := cache.Client.SCard(ctx, dislikesKey(roomID)).Result()
 	if err1 != nil || err2 != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
 		return
@@ -377,8 +379,8 @@ func MyReaction(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db_error"})
 		return
 	}
-
-	liked, err := cache.Client.SIsMember(c, likesKey(roomID), uid.String()).Result()
+	ctx := c.Request.Context()
+	liked, err := cache.Client.SIsMember(ctx, likesKey(roomID), uid.String()).Result()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
 		return
@@ -388,7 +390,7 @@ func MyReaction(c *gin.Context) {
 		return
 	}
 
-	disliked, err := cache.Client.SIsMember(c, dislikesKey(roomID), uid.String()).Result()
+	disliked, err := cache.Client.SIsMember(ctx, dislikesKey(roomID), uid.String()).Result()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
 		return

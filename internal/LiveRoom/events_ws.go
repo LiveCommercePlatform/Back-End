@@ -1,7 +1,7 @@
 package liveRoom
 
 import (
-	"net/http"
+	// "net/http"
 	"time"
 
 	// "livecommerce/internal/common/paramutil"
@@ -11,7 +11,7 @@ import (
 )
 
 var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool { return true }, // بعداً محدودش کن
+    CheckOrigin: allowWSOrigin,
 }
 
 const (

@@ -27,8 +27,6 @@ const (
 	chatHistoryMaxKeep = 200
 )
 
-
-
 func chatKey(roomID uuid.UUID) string {
 	return fmt.Sprintf("live:%s:chat", roomID.String())
 }
@@ -128,7 +126,6 @@ func WSChat() gin.HandlerFunc {
 				continue
 			}
 
-			// only supported message
 			if in.Type != "chat.send" {
 				_ = client.writeJSON(chatError{Type: "chat.error", Error: "unsupported_type", TS: time.Now().Unix()})
 				continue
@@ -163,12 +160,14 @@ func WSChat() gin.HandlerFunc {
 			raw, _ := json.Marshal(ev)
 			key := chatKey(roomID)
 
-			// LPUSH + LTRIM
+			// ✅ درست: context.Context از request
+			ctx := c.Request.Context()
+
 			pipe := cache.Client.Pipeline()
-			pipe.LPush(c, key, raw)
-			pipe.LTrim(c, key, 0, chatHistoryMaxKeep-1)
-			pipe.Expire(c, key, 24*time.Hour)
-			_, _ = pipe.Exec(c)
+			pipe.LPush(ctx, key, raw)
+			pipe.LTrim(ctx, key, 0, chatHistoryMaxKeep-1)
+			pipe.Expire(ctx, key, 24*time.Hour)
+			_, _ = pipe.Exec(ctx)
 
 			// broadcast to room
 			ChatEventsHub.Broadcast(roomID, ev)
@@ -208,7 +207,7 @@ func GetChatHistory(c *gin.Context) {
 		return
 	}
 
-	// existence check (history رو می‌تونیم live-only نکنیم)
+	// existence check
 	var lr models.LiveRoom
 	if err := database.DB.Select("id").First(&lr, "id = ?", roomID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -233,13 +232,16 @@ func GetChatHistory(c *gin.Context) {
 	}
 
 	key := chatKey(roomID)
-	items, err := cache.Client.LRange(c, key, 0, int64(limit-1)).Result()
+
+	// ✅ درست: context.Context از request
+	ctx := c.Request.Context()
+
+	items, err := cache.Client.LRange(ctx, key, 0, int64(limit-1)).Result()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
 		return
 	}
 
-	// چون LPUSH کردیم، newest-first هست. اگر UI oldest-first می‌خواد، reverse کن.
 	events := make([]chatEvent, 0, len(items))
 	for _, it := range items {
 		var ev chatEvent

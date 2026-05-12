@@ -1,6 +1,7 @@
 package liveRoom
 
 import (
+	"context"
 	"fmt"
 	"livecommerce/internal/cache"
 	"livecommerce/internal/database"
@@ -13,6 +14,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 )
+
+func redisCtx(c *gin.Context) context.Context {
+	// بهترین گزینه: با lifecycle request هماهنگ میشه (cancel/timeout)
+	return c.Request.Context()
+}
 
 func mustGetAuth(c *gin.Context) (uuid.UUID, string, bool) {
 	v, ok := c.Get("userID")
@@ -43,7 +49,6 @@ func isAdmin(role string) bool {
 	return role == "admin"
 }
 
-
 func findLiveRoomByID(roomID uuid.UUID) (*models.LiveRoom, error) {
 	var lr models.LiveRoom
 	if err := database.DB.First(&lr, "id = ?", roomID).Error; err != nil {
@@ -73,13 +78,15 @@ func ensureRoomNotEnded(c *gin.Context, lr *models.LiveRoom) bool {
 	return true
 }
 
-
 func getViewerCount(c *gin.Context, roomID uuid.UUID, ttlSeconds int) (int64, error) {
+	ctx := redisCtx(c)
+
 	key := viewersZKey(roomID)
 	now := time.Now().Unix()
 
+	// چون score = expiresAt هست، هر چیزی که expiresAt <= now باشه یعنی منقضی شده
 	if err := cache.Client.ZRemRangeByScore(
-		c,
+		ctx,
 		key,
 		"-inf",
 		fmt.Sprintf("%d", now),
@@ -87,17 +94,14 @@ func getViewerCount(c *gin.Context, roomID uuid.UUID, ttlSeconds int) (int64, er
 		return 0, err
 	}
 
-	cnt, err := cache.Client.ZCard(c, key).Result()
+	cnt, err := cache.Client.ZCard(ctx, key).Result()
 	if err != nil {
 		return 0, err
 	}
 
-	_ = cache.Client.Expire(c, key, time.Duration(ttlSeconds*10)*time.Second).Err()
-
+	_ = cache.Client.Expire(ctx, key, time.Duration(ttlSeconds*10)*time.Second).Err()
 	return cnt, nil
 }
-
-
 
 func loadRoomStatus(roomID uuid.UUID) (models.LiveStatus, error) {
 	var lr models.LiveRoom
@@ -109,8 +113,10 @@ func loadRoomStatus(roomID uuid.UUID) (models.LiveStatus, error) {
 }
 
 func runReactionScript(c *gin.Context, script *redis.Script, roomID uuid.UUID, userID uuid.UUID) (int64, int64, error) {
+	ctx := redisCtx(c)
+
 	keys := []string{likesKey(roomID), dislikesKey(roomID)}
-	res, err := script.Run(c, cache.Client, keys, userID.String()).Result()
+	res, err := script.Run(ctx, cache.Client, keys, userID.String()).Result()
 	if err != nil {
 		return 0, 0, err
 	}
@@ -134,7 +140,6 @@ func publishReactionsIfLive(roomID uuid.UUID, likes int64, dislikes int64) {
 		return
 	}
 
-	// LiveRoomEvent := 0
 	ev := LiveRoomEvent{
 		Type:   "live_room.reactions.updated",
 		RoomID: roomID.String(),
