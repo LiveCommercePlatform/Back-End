@@ -39,21 +39,80 @@ func (r *SFURoom) AddViewer(p *SFUPeer) {
 }
 
 func (r *SFURoom) RemovePeer(peerID string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
 
-	if r.Host != nil && r.Host.PeerID == peerID {
+	r.mu.Lock()
+
+	// host remove
+	if r.Host != nil &&
+		r.Host.PeerID == peerID {
+
+		host := r.Host
+
 		r.Host = nil
+
+		viewers := r.Viewers
+		r.Viewers = map[string]*SFUPeer{}
+
+		forwarders := r.Forwarders
+		r.Forwarders = map[string]*SFUForwarder{}
+
+		r.mu.Unlock()
+
+		if host != nil {
+			host.Close()
+		}
+
+		for _, viewer := range viewers {
+			if viewer != nil {
+				viewer.Close()
+			}
+		}
+
+		for _, f := range forwarders {
+			if f != nil {
+				f.Close()
+			}
+		}
+
+		sfuMu.Lock()
+		delete(sfuRooms, r.RoomID)
+		sfuMu.Unlock()
+
+		return
 	}
 
-	delete(r.Viewers, peerID)
+	// viewer remove
 
-	// remove peer from all forwarders
-	for _, f := range r.Forwarders {
-		f.RemoveSubscriber(peerID)
+	peer, ok := r.Viewers[peerID]
+
+	if ok {
+		delete(r.Viewers, peerID)
+	}
+
+	r.mu.Unlock()
+
+	if ok && peer != nil {
+
+		peer.Close()
+
+		r.mu.Lock()
+
+		for _, f := range r.Forwarders {
+			f.RemoveSubscriber(peerID)
+		}
+
+		r.mu.Unlock()
+	}
+
+	r.CleanupForwarders()
+
+	if r.Empty() {
+
+		sfuMu.Lock()
+		delete(sfuRooms, r.RoomID)
+		sfuMu.Unlock()
 	}
 }
-
 func (r *SFURoom) GetHost() *SFUPeer {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -90,17 +149,55 @@ func (r *SFURoom) GetForwarders() []*SFUForwarder {
 
 
 func (r *SFURoom) RequestKeyframe(trackID string) bool {
-    r.mu.RLock()
-    host := r.Host
-    f := r.Forwarders[trackID]
-    r.mu.RUnlock()
 
-    if host == nil || host.PC == nil || f == nil {
-        return false
-    }
+	r.mu.RLock()
 
-    _ = host.PC.WriteRTCP([]rtcp.Packet{
-        &rtcp.PictureLossIndication{MediaSSRC: f.SSRC},
-    })
-    return true
+	host := r.Host
+	f := r.Forwarders[trackID]
+
+	r.mu.RUnlock()
+
+	if host == nil ||
+		host.PC == nil ||
+		f == nil ||
+		f.Source == nil {
+
+		return false
+	}
+
+	_ = host.PC.WriteRTCP([]rtcp.Packet{
+		&rtcp.PictureLossIndication{
+			MediaSSRC: uint32(f.Source.SSRC()),
+		},
+	})
+
+	return true
+}
+
+
+func (r *SFURoom) Empty() bool {
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.Host == nil &&
+		len(r.Viewers) == 0
+}
+
+func (r *SFURoom) CleanupForwarders() {
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for trackID, f := range r.Forwarders {
+
+		if f == nil || f.Empty() {
+
+			if f != nil {
+				f.Close()
+			}
+
+			delete(r.Forwarders, trackID)
+		}
+	}
 }
