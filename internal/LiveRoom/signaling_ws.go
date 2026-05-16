@@ -13,12 +13,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"github.com/pion/rtcp"
-		"github.com/gorilla/websocket"
 	"github.com/pion/webrtc/v4"
 	"gorm.io/gorm"
 )
-
 
 // --------------------
 // SFU rooms registry
@@ -70,7 +69,6 @@ type signalOut struct {
 	Type string      `json:"type"`
 	Data interface{} `json:"data,omitempty"`
 	TS   int64       `json:"ts"`
-	NeedsNegotiation bool `json:"needs_negotiation,omitempty"`
 }
 
 type welcomeData struct {
@@ -118,8 +116,10 @@ func ensureRoomExists(c *gin.Context, roomID uuid.UUID) bool {
 
 	var lr models.LiveRoom
 
-	if err := database.DB.Select("id").
-		First(&lr, "id = ?", roomID).Error; err != nil {
+	if err := database.DB.
+		Select("id").
+		First(&lr, "id = ?", roomID).
+		Error; err != nil {
 
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 
@@ -251,12 +251,7 @@ func WSSignaling() gin.HandlerFunc {
 					if time.Since(getLastActivity()) > idleLimit {
 
 						if peer != nil {
-
 							room.RemovePeer(peer.PeerID)
-
-							// if peer.PC != nil {
-							// 	_ = peer.PC.Close()
-							// }
 						}
 
 						client.Close()
@@ -270,40 +265,6 @@ func WSSignaling() gin.HandlerFunc {
 			}
 		}()
 
-		go func() {
-
-			t := time.NewTicker(2 * time.Second)
-
-			defer t.Stop()
-
-			for range t.C {
-
-				if peer == nil || peer.PC == nil {
-					continue
-				}
-
-				if !peer.NeedsNegotiation.CompareAndSwap(true, false) {
-					continue
-				}
-
-				offer, err := peer.PC.CreateOffer(nil)
-				if err != nil {
-					continue
-				}
-
-				if err := peer.PC.SetLocalDescription(offer); err != nil {
-					continue
-				}
-
-				sendSignal(client,
-					"signal.renegotiate",
-					peer.PC.LocalDescription(),
-				)
-			}
-		}()
-
-
-		
 		sendSignal(client,
 			"signal.welcome",
 			welcomeData{
@@ -331,6 +292,10 @@ func WSSignaling() gin.HandlerFunc {
 			}
 
 			switch in.Type {
+
+			// -------------------------------------------------
+			// JOIN
+			// -------------------------------------------------
 
 			case "signal.join":
 
@@ -403,6 +368,8 @@ func WSSignaling() gin.HandlerFunc {
 					return
 				}
 
+				// ICE
+
 				pc.OnICECandidate(func(cand *webrtc.ICECandidate) {
 
 					if cand == nil {
@@ -415,10 +382,19 @@ func WSSignaling() gin.HandlerFunc {
 					)
 				})
 
+				// viewer recvonly
+
 				if r == "viewer" {
 
 					_, _ = pc.AddTransceiverFromKind(
 						webrtc.RTPCodecTypeVideo,
+						webrtc.RTPTransceiverInit{
+							Direction: webrtc.RTPTransceiverDirectionRecvonly,
+						},
+					)
+
+					_, _ = pc.AddTransceiverFromKind(
+						webrtc.RTPCodecTypeAudio,
 						webrtc.RTPTransceiverInit{
 							Direction: webrtc.RTPTransceiverDirectionRecvonly,
 						},
@@ -467,13 +443,13 @@ func WSSignaling() gin.HandlerFunc {
 					room.mu.RUnlock()
 
 					if old != nil {
-
 						room.RemovePeer(old.PeerID)
-
 					}
 				}
 
-				// publish only host
+				// -------------------------------------------------
+				// HOST TRACKS
+				// -------------------------------------------------
 
 				pc.OnTrack(func(
 					tr *webrtc.TrackRemote,
@@ -495,7 +471,7 @@ func WSSignaling() gin.HandlerFunc {
 						return
 					}
 
-					trackID := tr.ID()
+					trackID := tr.StreamID() + "_" + tr.ID()
 
 					f := NewSFUForwarder(
 						trackID,
@@ -529,30 +505,32 @@ func WSSignaling() gin.HandlerFunc {
 						sender, err :=
 							v.PC.AddTrack(local)
 
-						if err == nil {
-
-							v.SetSender(trackID, sender)
-
-							f.AddSubscriber(
-								v.PeerID,
-								local,
-							)
-
-							drainRTCP(sender)
-							v.NeedsNegotiation.Store(true)
-
-							_ = v.PC.WriteRTCP([]rtcp.Packet{
-								&rtcp.PictureLossIndication{
-									MediaSSRC: uint32(tr.SSRC()),
-								},
-							})
+						if err != nil {
+							continue
 						}
+
+						v.SetSender(trackID, sender)
+
+						f.AddSubscriber(
+							v.PeerID,
+							local,
+						)
+
+						drainRTCP(sender)
+
+						_ = v.PC.WriteRTCP([]rtcp.Packet{
+							&rtcp.PictureLossIndication{
+								MediaSSRC: uint32(tr.SSRC()),
+							},
+						})
 					}
 
 					go f.StartForwarding()
 				})
 
-				// register peer
+				// -------------------------------------------------
+				// REGISTER PEER
+				// -------------------------------------------------
 
 				if role == PeerRoleHost {
 
@@ -586,26 +564,27 @@ func WSSignaling() gin.HandlerFunc {
 						sender, err :=
 							peer.PC.AddTrack(local)
 
-						if err == nil {
-
-							peer.SetSender(
-								f.TrackID,
-								sender,
-							)
-
-							f.AddSubscriber(
-								peer.PeerID,
-								local,
-							)
-
-							drainRTCP(sender)
-
-							_ = peer.PC.WriteRTCP([]rtcp.Packet{
-								&rtcp.PictureLossIndication{
-									MediaSSRC: uint32(src.SSRC()),
-								},
-							})
+						if err != nil {
+							continue
 						}
+
+						peer.SetSender(
+							f.TrackID,
+							sender,
+						)
+
+						f.AddSubscriber(
+							peer.PeerID,
+							local,
+						)
+
+						drainRTCP(sender)
+
+						_ = peer.PC.WriteRTCP([]rtcp.Packet{
+							&rtcp.PictureLossIndication{
+								MediaSSRC: uint32(src.SSRC()),
+							},
+						})
 					}
 				}
 
@@ -616,6 +595,10 @@ func WSSignaling() gin.HandlerFunc {
 						Role:   string(role),
 					},
 				)
+
+			// -------------------------------------------------
+			// OFFER
+			// -------------------------------------------------
 
 			case "signal.offer":
 
@@ -628,7 +611,7 @@ func WSSignaling() gin.HandlerFunc {
 						},
 					)
 
-					return 
+					return
 				}
 
 				if strings.TrimSpace(in.SDP) == "" {
@@ -640,7 +623,7 @@ func WSSignaling() gin.HandlerFunc {
 						},
 					)
 
-					return 
+					return
 				}
 
 				offer := webrtc.SessionDescription{
@@ -692,6 +675,10 @@ func WSSignaling() gin.HandlerFunc {
 					pc.LocalDescription(),
 				)
 
+			// -------------------------------------------------
+			// ICE
+			// -------------------------------------------------
+
 			case "signal.ice":
 
 				if pc == nil {
@@ -725,15 +712,14 @@ func WSSignaling() gin.HandlerFunc {
 
 				_ = pc.AddICECandidate(cand)
 
+			// -------------------------------------------------
+			// LEAVE
+			// -------------------------------------------------
+
 			case "signal.leave":
 
 				if peer != nil {
-
 					room.RemovePeer(peer.PeerID)
-
-					// if peer.PC != nil {
-					// 	_ = peer.PC.Close()
-					// }
 				}
 
 				sendSignal(client,
@@ -744,6 +730,10 @@ func WSSignaling() gin.HandlerFunc {
 				client.Close()
 
 				return
+
+			// -------------------------------------------------
+			// KEYFRAME
+			// -------------------------------------------------
 
 			case "signal.request_keyframe":
 
@@ -797,6 +787,10 @@ func WSSignaling() gin.HandlerFunc {
 					},
 				)
 
+			// -------------------------------------------------
+			// UNKNOWN
+			// -------------------------------------------------
+
 			default:
 
 				sendSignal(client,
@@ -808,11 +802,10 @@ func WSSignaling() gin.HandlerFunc {
 			}
 		})
 
-	if peer != nil {
-		room.RemovePeer(peer.PeerID)
+		if peer != nil {
+			room.RemovePeer(peer.PeerID)
 		}
 
-	client.Close()
-		
+		client.Close()
 	}
 }
