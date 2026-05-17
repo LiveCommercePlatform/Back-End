@@ -54,3 +54,25 @@ func HasSFURoom(roomID uuid.UUID) bool {
 
 // فقط برای اینکه linter گیر نده اگر جایی sync لازم شد
 // var _ = sync.Mutex{}
+
+
+func cleanupRoom(room *SFURoom) {
+
+	if room == nil {
+		return
+	}
+
+	host := room.GetHost()
+
+	if host != nil {
+		host.Close()
+	}
+
+	for _, v := range room.ListViewers() {
+		v.Close()
+	}
+
+	for _, f := range room.GetForwarders() {
+		f.Close()
+	}
+}

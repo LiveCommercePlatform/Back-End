@@ -19,22 +19,24 @@ const (
 type SFUPeer struct {
 	PeerID string
 	RoomID uuid.UUID
-	Role   PeerRole
 
 	UserID *uuid.UUID
 
+	Role PeerRole
+
 	PC *webrtc.PeerConnection
 
-	mu      sync.RWMutex
+	mu sync.RWMutex
+
 	Senders map[string]*webrtc.RTPSender
 
-	ctx    context.Context
-	cancel context.CancelFunc
+	Ctx    context.Context
+	Cancel context.CancelFunc
 
-	closed atomic.Bool
 	NeedsNegotiation atomic.Bool
+	NegotiationMu sync.Mutex
+	MakingOffer  atomic.Bool
 }
-
 
 func NewSFUPeer(
 	peerID string,
@@ -50,11 +52,9 @@ func NewSFUPeer(
 		RoomID: roomID,
 		Role:   role,
 		PC:     pc,
-
 		Senders: make(map[string]*webrtc.RTPSender),
-
-		ctx:    ctx,
-		cancel: cancel,
+		Ctx:    ctx,
+		Cancel: cancel,
 	}
 }
 
@@ -69,33 +69,6 @@ func (p *SFUPeer) SetSender(
 	p.Senders[trackID] = sender
 }
 
-
-func (p *SFUPeer) Close() {
-
-	if !p.closed.CompareAndSwap(false, true) {
-		return
-	}
-
-	p.cancel()
-
-	p.mu.Lock()
-
-	for trackID, sender := range p.Senders {
-
-		if sender != nil {
-			_ = sender.Stop()
-		}
-
-		delete(p.Senders, trackID)
-	}
-
-	p.mu.Unlock()
-
-	if p.PC != nil {
-		_ = p.PC.Close()
-	}
-}
-
 func (p *SFUPeer) RemoveSender(trackID string) {
 
 	p.mu.Lock()
@@ -103,12 +76,30 @@ func (p *SFUPeer) RemoveSender(trackID string) {
 
 	sender, ok := p.Senders[trackID]
 
-	if ok {
+	if ok && sender != nil {
+		_ = sender.Stop()
+	}
+
+	delete(p.Senders, trackID)
+}
+
+func (p *SFUPeer) Close() {
+
+	p.Cancel()
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	for _, sender := range p.Senders {
 
 		if sender != nil {
 			_ = sender.Stop()
 		}
+	}
 
-		delete(p.Senders, trackID)
+	p.Senders = make(map[string]*webrtc.RTPSender)
+
+	if p.PC != nil {
+		_ = p.PC.Close()
 	}
 }

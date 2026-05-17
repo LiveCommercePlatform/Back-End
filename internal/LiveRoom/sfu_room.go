@@ -12,141 +12,148 @@ type SFURoom struct {
 
 	mu sync.RWMutex
 
-	Host    *SFUPeer
-	Viewers map[string]*SFUPeer // peerID -> peer
+	Host *SFUPeer
 
-	Forwarders map[string]*SFUForwarder // trackID -> forwarder
+	
+
+	Viewers map[string]*SFUPeer
+
+	Forwarders map[string]*SFUForwarder
 }
 
 func NewSFURoom(roomID uuid.UUID) *SFURoom {
+
 	return &SFURoom{
-		RoomID:     roomID,
-		Viewers:    make(map[string]*SFUPeer),
+		RoomID: roomID,
+		Viewers: make(map[string]*SFUPeer),
 		Forwarders: make(map[string]*SFUForwarder),
 	}
 }
 
-func (r *SFURoom) SetHost(p *SFUPeer) {
+func (r *SFURoom) SetHost(peer *SFUPeer) {
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.Host = p
+
+	r.Host = peer
 }
 
-func (r *SFURoom) AddViewer(p *SFUPeer) {
+func (r *SFURoom) GetHost() *SFUPeer {
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.Host
+}
+
+func (r *SFURoom) AddViewer(peer *SFUPeer) {
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.Viewers[p.PeerID] = p
+
+	r.Viewers[peer.PeerID] = peer
+}
+
+func (r *SFURoom) ListViewers() []*SFUPeer {
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	out := make([]*SFUPeer, 0, len(r.Viewers))
+
+	for _, v := range r.Viewers {
+		out = append(out, v)
+	}
+
+	return out
+}
+
+func (r *SFURoom) UpsertForwarder(
+	trackID string,
+	f *SFUForwarder,
+) {
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	r.Forwarders[trackID] = f
+}
+
+func (r *SFURoom) GetForwarders() []*SFUForwarder {
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	out := make([]*SFUForwarder, 0, len(r.Forwarders))
+
+	for _, f := range r.Forwarders {
+		out = append(out, f)
+	}
+
+	return out
 }
 
 func (r *SFURoom) RemovePeer(peerID string) {
 
 	r.mu.Lock()
 
-	// host remove
-	if r.Host != nil &&
-		r.Host.PeerID == peerID {
+	if r.Host != nil && r.Host.PeerID == peerID {
 
 		host := r.Host
 
 		r.Host = nil
 
-		viewers := r.Viewers
-		r.Viewers = map[string]*SFUPeer{}
+		viewers := make([]*SFUPeer, 0, len(r.Viewers))
 
-		forwarders := r.Forwarders
-		r.Forwarders = map[string]*SFUForwarder{}
+		for _, v := range r.Viewers {
+			viewers = append(viewers, v)
+		}
+
+		forwarders := make([]*SFUForwarder, 0, len(r.Forwarders))
+
+		for _, f := range r.Forwarders {
+			forwarders = append(forwarders, f)
+		}
+
+		r.Viewers = make(map[string]*SFUPeer)
+		r.Forwarders = make(map[string]*SFUForwarder)
 
 		r.mu.Unlock()
 
-		if host != nil {
-			host.Close()
-		}
+		host.Close()
 
 		for _, viewer := range viewers {
-			if viewer != nil {
-				viewer.Close()
-			}
+			viewer.Close()
 		}
 
 		for _, f := range forwarders {
-			if f != nil {
-				f.Close()
-			}
+			f.Close()
 		}
-
-		sfuMu.Lock()
-		delete(sfuRooms, r.RoomID)
-		sfuMu.Unlock()
 
 		return
 	}
 
-	// viewer remove
 
-	peer, ok := r.Viewers[peerID]
+	forwarders := make([]*SFUForwarder, 0, len(r.Forwarders))
 
-	if ok {
-		delete(r.Viewers, peerID)
+	for _, f := range r.Forwarders {
+		forwarders = append(forwarders, f)
 	}
+
+	viewer := r.Viewers[peerID]
+
+	delete(r.Viewers, peerID)
 
 	r.mu.Unlock()
 
-	if ok && peer != nil {
-
-		peer.Close()
-
-		r.mu.Lock()
-
-		for _, f := range r.Forwarders {
-			f.RemoveSubscriber(peerID)
-		}
-
-		r.mu.Unlock()
+	if viewer != nil {
+		viewer.Close()
 	}
 
-	r.CleanupForwarders()
-
-	if r.Empty() {
-
-		sfuMu.Lock()
-		delete(sfuRooms, r.RoomID)
-		sfuMu.Unlock()
+	for _, f := range forwarders {
+		f.RemoveSubscriber(peerID)
 	}
 }
-func (r *SFURoom) GetHost() *SFUPeer {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.Host
-}
-
-func (r *SFURoom) ListViewers() []*SFUPeer {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	out := make([]*SFUPeer, 0, len(r.Viewers))
-	for _, v := range r.Viewers {
-		out = append(out, v)
-	}
-	return out
-}
-
-func (r *SFURoom) UpsertForwarder(trackID string, f *SFUForwarder) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.Forwarders[trackID] = f
-}
-
-func (r *SFURoom) GetForwarders() []*SFUForwarder {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
-	out := make([]*SFUForwarder, 0, len(r.Forwarders))
-	for _, f := range r.Forwarders {
-		out = append(out, f)
-	}
-	return out
-}
-
 
 func (r *SFURoom) RequestKeyframe(trackID string) bool {
 
@@ -157,11 +164,7 @@ func (r *SFURoom) RequestKeyframe(trackID string) bool {
 
 	r.mu.RUnlock()
 
-	if host == nil ||
-		host.PC == nil ||
-		f == nil ||
-		f.Source == nil {
-
+	if host == nil || host.PC == nil || f == nil || f.Source == nil {
 		return false
 	}
 
@@ -173,7 +176,13 @@ func (r *SFURoom) RequestKeyframe(trackID string) bool {
 
 	return true
 }
+func (r *SFURoom) RemoveForwarder(trackID string) {
 
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	delete(r.Forwarders, trackID)
+}
 
 func (r *SFURoom) Empty() bool {
 
@@ -184,20 +193,17 @@ func (r *SFURoom) Empty() bool {
 		len(r.Viewers) == 0
 }
 
-func (r *SFURoom) CleanupForwarders() {
+func cleanupRoomIfEmpty(roomID uuid.UUID) {
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
+	sfuMu.Lock()
+	defer sfuMu.Unlock()
 
-	for trackID, f := range r.Forwarders {
+	room, ok := sfuRooms[roomID]
+	if !ok {
+		return
+	}
 
-		if f == nil || f.Empty() {
-
-			if f != nil {
-				f.Close()
-			}
-
-			delete(r.Forwarders, trackID)
-		}
+	if room.Empty() {
+		delete(sfuRooms, roomID)
 	}
 }
