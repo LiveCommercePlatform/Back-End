@@ -2,16 +2,16 @@ package liveRoom
 
 type SignalMessage struct {
 	Type string `json:"type"`
-	Data any    `json:"data"`
+	Payload any    `json:"payload"`
 }
 
 func NewSignalMessage(
 	t string,
-	data any,
+	payload any,
 ) SignalMessage {
 
 	return SignalMessage{
-		Type: t,
-		Data: data,
+		Type:    t,
+		Payload: payload,
 	}
 }

@@ -207,3 +207,15 @@ func cleanupRoomIfEmpty(roomID uuid.UUID) {
 		delete(sfuRooms, roomID)
 	}
 }
+
+func (r *SFURoom) GetForwarder(
+	trackID string,
+) (*SFUForwarder, bool) {
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	f, ok := r.Forwarders[trackID]
+
+	return f, ok
+}

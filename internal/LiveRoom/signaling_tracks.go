@@ -1,4 +1,3 @@
-// signaling_tracks.go
 package liveRoom
 
 import (
@@ -14,6 +13,12 @@ func handleTrack(
 	room := session.Room
 
 	trackID := track.ID()
+
+	oldForwarder, ok := room.GetForwarder(trackID)
+
+	if ok && oldForwarder != nil {
+		oldForwarder.Close()
+	}
 
 	forwarder := NewSFUForwarder(
 		trackID,
@@ -60,23 +65,30 @@ func handleTrack(
 			sender,
 		)
 
+		drainRTCP(sender)
+
 		forwarder.AddSubscriber(
 			viewer.PeerID,
 			localTrack,
 		)
 
 		viewer.NeedsNegotiation.Store(true)
+
+		triggerNegotiation(
+			session.Client,
+			viewer,
+		)
 	}
 
 	forwarder.StartForwarding()
 }
 
 func attachViewerTracks(
-	room *SFURoom,
+	session *SignalingSession,
 	viewer *SFUPeer,
 ) {
 
-	forwarders := room.GetForwarders()
+	forwarders := session.Room.GetForwarders()
 
 	for _, f := range forwarders {
 
@@ -104,6 +116,8 @@ func attachViewerTracks(
 			sender,
 		)
 
+		drainRTCP(sender)
+
 		f.AddSubscriber(
 			viewer.PeerID,
 			localTrack,
@@ -111,4 +125,9 @@ func attachViewerTracks(
 	}
 
 	viewer.NeedsNegotiation.Store(true)
+
+	triggerNegotiation(
+		session.Client,
+		viewer,
+	)
 }

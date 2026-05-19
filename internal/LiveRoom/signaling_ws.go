@@ -1,6 +1,7 @@
 package liveRoom
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -55,35 +56,45 @@ func WSWebRTCSignaling(c *gin.Context) {
 
 	defer session.Cleanup()
 
-	go startNegotiationLoop(session)
+	// go startNegotiationLoop(session)
 
-	for {
+client.ReadPump(func(
+    messageType int,
+    data []byte,
+) {
 
-		var msg SignalMessage
-
-		if err := conn.ReadJSON(&msg); err != nil {
-			return
-		}
-
-		session.Touch()
-
-		switch msg.Type {
-
-		case "join":
-			handleJoin(session, msg)
-
-		case "offer":
-			handleOffer(session, msg)
-
-		case "answer":
-			handleAnswer(session, msg)
-
-		case "ice_candidate":
-			handleICECandidate(session, msg)
-
-		case "leave":
-			handleLeave(session)
-			return
-		}
+	if messageType != websocket.TextMessage {
+		return
 	}
+
+	var msg SignalMessage
+
+	if err := json.Unmarshal(
+		data,
+		&msg,
+	); err != nil {
+		return
+	}
+
+	session.Touch()
+
+	switch msg.Type {
+
+	case "join":
+		handleJoin(session, msg)
+
+	case "offer":
+		handleOffer(session, msg)
+
+	case "answer":
+		handleAnswer(session, msg)
+
+	case "ice_candidate":
+		handleICECandidate(session, msg)
+
+	case "leave":
+		handleLeave(session)
+		return
+	}
+})
 }

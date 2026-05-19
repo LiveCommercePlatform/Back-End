@@ -12,10 +12,15 @@ func handleJoin(
 	msg SignalMessage,
 ) {
 
+	existingPeer, _ := session.GetPeer()
+
+	if existingPeer != nil {
+		return
+	}
 	var payload JoinSignalPayload
 
 	if err := mapToStruct(
-		msg.Data,
+		msg.Payload,
 		&payload,
 	); err != nil {
 		return
@@ -26,10 +31,19 @@ func handleJoin(
 		return
 	}
 
+	role, ok := ParsePeerRole(
+		payload.Role,
+	)
+
+	if !ok {
+		_ = pc.Close()
+		return
+	}
+
 	peer := NewSFUPeer(
 		uuid.NewString(),
 		session.Room.RoomID,
-		PeerRole(payload.Role),
+		role,
 		pc,
 	)
 
@@ -44,7 +58,7 @@ func handleJoin(
 		session.Room.AddViewer(peer)
 
 		attachViewerTracks(
-			session.Room,
+			session,
 			peer,
 		)
 	}
@@ -57,14 +71,11 @@ func handleJoin(
 			return
 		}
 
-		if !session.Client.SafeSend(
-			NewSignalMessage(
-				"ice_candidate",
-				candidate.ToJSON(),
-			),
-		) {
-			session.Client.Close()
-		}
+		sendSignal(
+			session.Client,
+			"ice_candidate",
+			candidate.ToJSON(),
+		)
 	})
 
 	pc.OnTrack(func(
@@ -94,13 +105,36 @@ func handleOffer(
 	var offer webrtc.SessionDescription
 
 	if err := mapToStruct(
-		msg.Data,
+		msg.Payload,
 		&offer,
 	); err != nil {
 		return
 	}
 
+	state := pc.SignalingState()
+
+	if state != webrtc.SignalingStateStable &&
+		state != webrtc.SignalingStateHaveLocalOffer {
+		return
+	}
+
+if pc.SignalingState() != webrtc.SignalingStateStable {
+
+	if err := pc.SetLocalDescription(
+		webrtc.SessionDescription{
+			Type: webrtc.SDPTypeRollback,
+		},
+	); err != nil {
+
+		session.Cleanup()
+		return
+	}
+}
+
 	if err := pc.SetRemoteDescription(offer); err != nil {
+
+		session.Cleanup()
+
 		return
 	}
 
@@ -114,6 +148,7 @@ func handleOffer(
 	}
 
 	if err := pc.SetLocalDescription(answer); err != nil {
+		session.Cleanup()
 		return
 	}
 
@@ -138,13 +173,22 @@ func handleAnswer(
 	var answer webrtc.SessionDescription
 
 	if err := mapToStruct(
-		msg.Data,
+		msg.Payload,
 		&answer,
 	); err != nil {
 		return
 	}
 
+	if pc.SignalingState() !=
+	webrtc.SignalingStateHaveLocalOffer {
+	return
+}
+
+
 	if err := pc.SetRemoteDescription(answer); err != nil {
+
+		session.Cleanup()
+
 		return
 	}
 
@@ -161,13 +205,18 @@ func handleICECandidate(
 	var candidate webrtc.ICECandidateInit
 
 	if err := mapToStruct(
-		msg.Data,
+		msg.Payload,
 		&candidate,
 	); err != nil {
 		return
 	}
 
-	_ = session.AddICECandidate(candidate)
+	if err := session.AddICECandidate(candidate); err != nil {
+
+	session.Cleanup()
+
+	return
+}
 }
 
 func handleLeave(

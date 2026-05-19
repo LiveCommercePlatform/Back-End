@@ -103,3 +103,20 @@ func (p *SFUPeer) Close() {
 		_ = p.PC.Close()
 	}
 }
+
+func ParsePeerRole(
+	role string,
+) (PeerRole, bool) {
+
+	switch role {
+
+	case string(PeerRoleHost):
+		return PeerRoleHost, true
+
+	case string(PeerRoleViewer):
+		return PeerRoleViewer, true
+
+	default:
+		return "", false
+	}
+}

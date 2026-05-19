@@ -2,18 +2,16 @@ package liveRoom
 
 import (
 	"context"
-	"errors"
 	"io"
+	"log"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/pion/webrtc/v4"
 )
 
 const (
-	forwarderBufferSize = 2048
-	rtpWriteTimeout     = 200 * time.Millisecond
+	forwarderBufferSize = 1460
 )
 
 type SFUForwarder struct {
@@ -35,14 +33,18 @@ func NewSFUForwarder(
 	src *webrtc.TrackRemote,
 ) *SFUForwarder {
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(
+		context.Background(),
+	)
 
 	return &SFUForwarder{
 		TrackID:    trackID,
 		Source:     src,
-		Subscribers: make(map[string]*webrtc.TrackLocalStaticRTP),
-		Ctx:        ctx,
-		Cancel:     cancel,
+		Subscribers: make(
+			map[string]*webrtc.TrackLocalStaticRTP,
+		),
+		Ctx:    ctx,
+		Cancel: cancel,
 	}
 }
 
@@ -51,6 +53,9 @@ func (f *SFUForwarder) AddSubscriber(
 	track *webrtc.TrackLocalStaticRTP,
 ) {
 
+	if _, exists := f.Subscribers[peerID]; exists {
+	return
+}
 	if track == nil {
 		return
 	}
@@ -65,12 +70,25 @@ func (f *SFUForwarder) AddSubscriber(
 	f.Subscribers[peerID] = track
 }
 
-func (f *SFUForwarder) RemoveSubscriber(peerID string) {
+func (f *SFUForwarder) RemoveSubscriber(
+	peerID string,
+) {
+
+	shouldClose := false
 
 	f.mu.Lock()
-	defer f.mu.Unlock()
 
 	delete(f.Subscribers, peerID)
+
+	if len(f.Subscribers) == 0 {
+		shouldClose = true
+	}
+
+	f.mu.Unlock()
+
+	if shouldClose {
+		f.Close()
+	}
 }
 
 func (f *SFUForwarder) Empty() bool {
@@ -87,54 +105,24 @@ func (f *SFUForwarder) Close() {
 		return
 	}
 
-	f.Cancel()
-
 	f.mu.Lock()
-	defer f.mu.Unlock()
 
-	f.Subscribers =
-		make(map[string]*webrtc.TrackLocalStaticRTP)
+	f.Subscribers = make(
+		map[string]*webrtc.TrackLocalStaticRTP,
+	)
+
+	f.mu.Unlock()
+
+	log.Printf(
+	"[SFU_FORWARDER] closed track=%s",
+	f.TrackID,
+		)
+
+	f.Cancel()
 }
 
 func (f *SFUForwarder) IsClosed() bool {
 	return f.closed.Load()
-}
-
-func writeRTPWithTimeout(
-	ctx context.Context,
-	track *webrtc.TrackLocalStaticRTP,
-	packet []byte,
-) error {
-
-	if track == nil {
-		return errors.New("nil_track")
-	}
-
-	done := make(chan error, 1)
-
-	go func() {
-
-		_, err := track.Write(packet)
-
-		select {
-
-		case done <- err:
-
-		default:
-		}
-	}()
-
-	select {
-
-	case err := <-done:
-		return err
-
-	case <-ctx.Done():
-		return ctx.Err()
-
-	case <-time.After(rtpWriteTimeout):
-		return errors.New("rtp_write_timeout")
-	}
 }
 
 func (f *SFUForwarder) StartForwarding() {
@@ -144,11 +132,16 @@ func (f *SFUForwarder) StartForwarding() {
 	}
 
 	if f.Source == nil {
+
 		f.Close()
+
 		return
 	}
 
-	buf := make([]byte, forwarderBufferSize)
+	buf := make(
+		[]byte,
+		forwarderBufferSize,
+	)
 
 	for {
 
@@ -165,7 +158,12 @@ func (f *SFUForwarder) StartForwarding() {
 		if err != nil {
 
 			if err != io.EOF {
-				// optional logging later
+
+				log.Printf(
+					"[SFU_FORWARDER] track=%s read_error=%v",
+					f.TrackID,
+					err,
+				)
 			}
 
 			f.Close()
@@ -199,13 +197,16 @@ func (f *SFUForwarder) StartForwarding() {
 				continue
 			}
 
-			err := writeRTPWithTimeout(
-				f.Ctx,
-				track,
-				buf[:n],
-			)
+			_, err := track.Write(buf[:n])
 
 			if err != nil {
+
+				log.Printf(
+					"[SFU_FORWARDER] track=%s peer=%s write_error=%v",
+					f.TrackID,
+					peerID,
+					err,
+				)
 
 				f.RemoveSubscriber(peerID)
 			}
