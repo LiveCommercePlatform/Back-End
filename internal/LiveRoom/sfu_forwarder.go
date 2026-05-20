@@ -48,26 +48,23 @@ func NewSFUForwarder(
 	}
 }
 
-func (f *SFUForwarder) AddSubscriber(
-	peerID string,
-	track *webrtc.TrackLocalStaticRTP,
-) {
+func (f *SFUForwarder) AddSubscriber(peerID string, track *webrtc.TrackLocalStaticRTP) {
+    if track == nil {
+        return
+    }
 
-	if _, exists := f.Subscribers[peerID]; exists {
-	return
-}
-	if track == nil {
-		return
-	}
+    f.mu.Lock()
+    defer f.mu.Unlock()
 
-	f.mu.Lock()
-	defer f.mu.Unlock()
+    if f.closed.Load() {
+        return
+    }
 
-	if f.closed.Load() {
-		return
-	}
+    if _, exists := f.Subscribers[peerID]; exists {  
+        return
+    }
 
-	f.Subscribers[peerID] = track
+    f.Subscribers[peerID] = track
 }
 
 func (f *SFUForwarder) RemoveSubscriber(

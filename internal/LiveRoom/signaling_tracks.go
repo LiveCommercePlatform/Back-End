@@ -75,7 +75,7 @@ func handleTrack(
 		viewer.NeedsNegotiation.Store(true)
 
 		triggerNegotiation(
-			session.Client,
+			viewer.Client,
 			viewer,
 		)
 	}
@@ -127,7 +127,7 @@ func attachViewerTracks(
 	viewer.NeedsNegotiation.Store(true)
 
 	triggerNegotiation(
-		session.Client,
+		viewer.Client,
 		viewer,
 	)
 }

@@ -17,6 +17,9 @@ func handleJoin(
 	if existingPeer != nil {
 		return
 	}
+
+	
+
 	var payload JoinSignalPayload
 
 	if err := mapToStruct(
@@ -45,6 +48,7 @@ func handleJoin(
 		session.Room.RoomID,
 		role,
 		pc,
+		session.Client,
 	)
 
 	session.SetPeer(peer, pc)
@@ -52,6 +56,14 @@ func handleJoin(
 	if peer.Role == PeerRoleHost {
 
 		session.Room.SetHost(peer)
+		    pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+        if state == webrtc.PeerConnectionStateFailed ||
+            state == webrtc.PeerConnectionStateDisconnected ||
+            state == webrtc.PeerConnectionStateClosed {
+
+            go endLiveRoomFromSFU(session.Room.RoomID)
+        }
+    })
 
 	} else {
 

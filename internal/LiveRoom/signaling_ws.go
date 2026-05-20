@@ -2,6 +2,8 @@ package liveRoom
 
 import (
 	"encoding/json"
+	"livecommerce/internal/database"
+	"livecommerce/internal/models"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -25,20 +27,36 @@ var signalingUpgrader = websocket.Upgrader{
 // @Router /ws/live-rooms/{id}/signaling [get]
 func WSWebRTCSignaling(c *gin.Context) {
 
-	roomIDParam := c.Param("roomID")
+	// roomIDParam := c.Param("roomID")
 
-	roomID, err := uuid.Parse(roomIDParam)
+	// roomID, err := uuid.Parse(roomIDParam)
+	roomID, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.AbortWithStatus(http.StatusBadRequest)
 		return
 	}
+
+	userID, _, ok := mustGetAuth(c)
+    if !ok {
+        return
+    }
+
+	var lr models.LiveRoom
+    if err := database.DB.Select("id,status,host_id").
+        First(&lr, "id = ?", roomID).Error; err != nil {
+        c.AbortWithStatus(http.StatusNotFound)
+        return
+    }
+    if lr.Status != models.LiveLive {
+        c.AbortWithStatus(http.StatusConflict)
+        return
+    }
 
 	conn, err := signalingUpgrader.Upgrade(
 		c.Writer,
 		c.Request,
 		nil,
 	)
-
 	if err != nil {
 		return
 	}
@@ -53,6 +71,9 @@ func WSWebRTCSignaling(c *gin.Context) {
 		client,
 		room,
 	)
+	session.UserID = &userID      
+    session.RoomID = roomID       
+    session.HostID = lr.HostID 
 
 	defer session.Cleanup()
 

@@ -6,10 +6,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/pion/webrtc/v4"
 )
 
 type SignalingSession struct {
+
+	RoomID uuid.UUID   
+    UserID *uuid.UUID
+	HostID uuid.UUID
+	
 	mu sync.RWMutex
 
 	Client *WSClient
@@ -17,6 +23,8 @@ type SignalingSession struct {
 
 	Peer *SFUPeer
 	PC   *webrtc.PeerConnection
+
+
 
 	LastActivity time.Time
 

@@ -32,6 +32,7 @@ type SFUPeer struct {
 
 	Ctx    context.Context
 	Cancel context.CancelFunc
+	Client *WSClient
 
 	NeedsNegotiation atomic.Bool
 	NegotiationMu sync.Mutex
@@ -43,6 +44,7 @@ func NewSFUPeer(
 	roomID uuid.UUID,
 	role PeerRole,
 	pc *webrtc.PeerConnection,
+	client *WSClient,
 ) *SFUPeer {
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -52,6 +54,7 @@ func NewSFUPeer(
 		RoomID: roomID,
 		Role:   role,
 		PC:     pc,
+		Client:  client,
 		Senders: make(map[string]*webrtc.RTPSender),
 		Ctx:    ctx,
 		Cancel: cancel,
