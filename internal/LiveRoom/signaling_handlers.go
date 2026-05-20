@@ -43,6 +43,14 @@ func handleJoin(
 		return
 	}
 
+	if role == PeerRoleHost {
+    if session.UserID == nil || *session.UserID != session.HostID {
+        _ = pc.Close()
+        sendSignal(session.Client, "error", "forbidden")
+        return
+    }
+}
+
 	peer := NewSFUPeer(
 		uuid.NewString(),
 		session.Room.RoomID,
@@ -130,7 +138,7 @@ func handleOffer(
 		return
 	}
 
-if pc.SignalingState() != webrtc.SignalingStateStable {
+if state != webrtc.SignalingStateStable {
 
 	if err := pc.SetLocalDescription(
 		webrtc.SessionDescription{

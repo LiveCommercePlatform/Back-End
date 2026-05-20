@@ -31,6 +31,10 @@ func chatKey(roomID uuid.UUID) string {
 	return fmt.Sprintf("live:%s:chat", roomID.String())
 }
 
+func InitChatHub() {
+    ChatEventsHub = NewChatHub()
+}
+
 func loadRoomLiveOnly(c *gin.Context, roomID uuid.UUID) (*models.LiveRoom, bool) {
 	var lr models.LiveRoom
 	if err := database.DB.Select("id,status").First(&lr, "id = ?", roomID).Error; err != nil {
@@ -81,9 +85,6 @@ func WSChat() gin.HandlerFunc {
 			return
 		}
 
-		if ChatEventsHub == nil {
-			ChatEventsHub = NewChatHub()
-		}
 
 		client := &chatClient{conn: conn}
 		ChatEventsHub.Add(roomID, client)

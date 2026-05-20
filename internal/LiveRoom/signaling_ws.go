@@ -11,11 +11,11 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var signalingUpgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+// var signalingUpgrader = websocket.Upgrader{
+// 	CheckOrigin: func(r *http.Request) bool {
+// 		return true
+// 	},
+// }
 
 
 // WSSignaling godoc
@@ -52,7 +52,7 @@ func WSWebRTCSignaling(c *gin.Context) {
         return
     }
 
-	conn, err := signalingUpgrader.Upgrade(
+	conn, err := upgrader.Upgrade(
 		c.Writer,
 		c.Request,
 		nil,
@@ -77,7 +77,6 @@ func WSWebRTCSignaling(c *gin.Context) {
 
 	defer session.Cleanup()
 
-	// go startNegotiationLoop(session)
 
 client.ReadPump(func(
     messageType int,

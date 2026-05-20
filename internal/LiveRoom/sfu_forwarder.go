@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	forwarderBufferSize = 1460
+	forwarderBufferSize = 8000
 )
 
 type SFUForwarder struct {

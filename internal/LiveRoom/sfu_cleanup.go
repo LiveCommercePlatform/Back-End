@@ -98,31 +98,3 @@ func HasSFURoom(
 	return ok
 }
 
-func cleanupRoom(
-	room *SFURoom,
-) {
-
-	if room == nil {
-		return
-	}
-
-	host := room.GetHost()
-
-	if host != nil {
-		host.Close()
-	}
-
-	for _, v := range room.ListViewers() {
-
-		if v != nil {
-			v.Close()
-		}
-	}
-
-	for _, f := range room.GetForwarders() {
-
-		if f != nil {
-			f.Close()
-		}
-	}
-}

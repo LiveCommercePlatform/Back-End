@@ -238,10 +238,10 @@ func Dislike(c *gin.Context) {
 		return
 	}
 
-	// 	if status != models.LiveLive {
-	// c.JSON(http.StatusConflict, gin.H{"error":"live_room_not_live"})
-	// return
-	// }
+		if status != models.LiveLive {
+	c.JSON(http.StatusConflict, gin.H{"error":"live_room_not_live"})
+	return
+	}
 
 	likeCount, dislikeCount, err := runReactionScript(c, dislikeScript, roomID, uid)
 	if err != nil {

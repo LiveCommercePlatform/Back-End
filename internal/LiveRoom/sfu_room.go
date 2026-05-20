@@ -193,20 +193,6 @@ func (r *SFURoom) Empty() bool {
 		len(r.Viewers) == 0
 }
 
-func cleanupRoomIfEmpty(roomID uuid.UUID) {
-
-	sfuMu.Lock()
-	defer sfuMu.Unlock()
-
-	room, ok := sfuRooms[roomID]
-	if !ok {
-		return
-	}
-
-	if room.Empty() {
-		delete(sfuRooms, roomID)
-	}
-}
 
 func (r *SFURoom) GetForwarder(
 	trackID string,
