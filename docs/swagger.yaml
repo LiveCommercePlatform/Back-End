@@ -84,6 +84,78 @@ definitions:
     - code
     - email
     type: object
+  liveRoom.AttachProductsInput:
+    properties:
+      product_ids:
+        items:
+          type: string
+        minItems: 1
+        type: array
+    required:
+    - product_ids
+    type: object
+  liveRoom.CreateLiveRoomInput:
+    properties:
+      description:
+        maxLength: 2000
+        type: string
+      is_recorded:
+        type: boolean
+      title:
+        maxLength: 120
+        minLength: 3
+        type: string
+    required:
+    - title
+    type: object
+  liveRoom.PinProductInput:
+    properties:
+      is_pinned:
+        type: boolean
+    type: object
+  liveRoom.ReactionSummary:
+    properties:
+      dislikes:
+        type: integer
+      likes:
+        type: integer
+    type: object
+  liveRoom.ReorderProductsInput:
+    properties:
+      items:
+        items:
+          properties:
+            product_id:
+              type: string
+            sort_order:
+              type: integer
+          required:
+          - product_id
+          type: object
+        minItems: 1
+        type: array
+    required:
+    - items
+    type: object
+  liveRoom.UpdateLiveRoomInput:
+    properties:
+      description:
+        maxLength: 2000
+        type: string
+      is_recorded:
+        type: boolean
+      title:
+        maxLength: 120
+        minLength: 3
+        type: string
+    type: object
+  liveRoom.ViewPingInput:
+    properties:
+      viewer_key:
+        type: string
+    required:
+    - viewer_key
+    type: object
   models.Category:
     properties:
       children:
@@ -120,6 +192,77 @@ definitions:
       user_id:
         type: string
     type: object
+  models.LiveRoom:
+    properties:
+      createdAt:
+        type: string
+      description:
+        type: string
+      duration:
+        type: integer
+      endedAt:
+        type: string
+      host:
+        $ref: '#/definitions/models.User'
+      hostID:
+        type: string
+      id:
+        type: string
+      isRecorded:
+        type: boolean
+      products:
+        items:
+          $ref: '#/definitions/models.LiveRoomProduct'
+        type: array
+      sfuroomID:
+        description: مثلا room UUID به string یا یک اسم داخلی
+        type: string
+      startedAt:
+        type: string
+      status:
+        $ref: '#/definitions/models.LiveStatus'
+      title:
+        type: string
+      totalDislikes:
+        type: integer
+      totalLikes:
+        type: integer
+      totalViews:
+        type: integer
+      updatedAt:
+        type: string
+    type: object
+  models.LiveRoomProduct:
+    properties:
+      createdAt:
+        type: string
+      id:
+        type: integer
+      isPinned:
+        type: boolean
+      liveRoom:
+        $ref: '#/definitions/models.LiveRoom'
+      liveRoomID:
+        type: string
+      product:
+        $ref: '#/definitions/models.Product'
+      productID:
+        type: string
+      sortOrder:
+        type: integer
+      updatedAt:
+        type: string
+    type: object
+  models.LiveStatus:
+    enum:
+    - scheduled
+    - live
+    - ended
+    type: string
+    x-enum-varnames:
+    - LiveScheduled
+    - LiveLive
+    - LiveEnded
   models.MediaType:
     enum:
     - image
@@ -128,6 +271,62 @@ definitions:
     x-enum-varnames:
     - MediaImage
     - MediaVideo
+  models.Product:
+    properties:
+      category:
+        $ref: '#/definitions/models.Category'
+      category_id:
+        type: integer
+      comments:
+        items:
+          $ref: '#/definitions/models.Comment'
+        type: array
+      cover_image:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      dislike_count:
+        type: integer
+      id:
+        type: string
+      like_count:
+        type: integer
+      media:
+        items:
+          $ref: '#/definitions/models.ProductMedia'
+        type: array
+      owner:
+        $ref: '#/definitions/models.User'
+      owner_id:
+        type: string
+      price:
+        description: Slug        string `gorm:"uniqueIndex;not null" json:"slug"`
+        type: integer
+      rating_avg:
+        type: number
+      rating_count:
+        type: integer
+      rating_sum:
+        type: integer
+      reports:
+        items:
+          $ref: '#/definitions/models.ProductReport'
+        type: array
+      stock:
+        type: integer
+      tags:
+        items:
+          $ref: '#/definitions/models.Tag'
+        type: array
+      title:
+        type: string
+      updated_at:
+        type: string
+      view_count:
+        type: integer
+    type: object
   models.ProductMedia:
     properties:
       id:
@@ -893,6 +1092,968 @@ paths:
       summary: Update a comment
       tags:
       - comments
+  /live-rooms:
+    get:
+      description: List live rooms with optional status filter
+      parameters:
+      - description: scheduled | live | ended
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.LiveRoom'
+            type: array
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List live rooms
+      tags:
+      - liveroom
+    post:
+      consumes:
+      - application/json
+      description: Create a new live room (product can be attached later)
+      parameters:
+      - description: Live room data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/liveRoom.CreateLiveRoomInput'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.LiveRoom'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create live room
+      tags:
+      - liveroom
+  /live-rooms/{id}:
+    delete:
+      description: Delete a live room (owner or admin). Cannot delete while live.
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete live room
+      tags:
+      - liveroom
+    get:
+      description: Get live room details by id
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LiveRoom'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get live room
+      tags:
+      - liveroom
+    patch:
+      consumes:
+      - application/json
+      description: Update title/description/is_recorded (owner or admin)
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Update data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/liveRoom.UpdateLiveRoomInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LiveRoom'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/chat/history:
+    get:
+      description: Get last N chat messages (authenticated)
+      parameters:
+      - description: LiveRoom ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: max items (default 50, max 200)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Chat history
+      tags:
+      - liveroom
+  /live-rooms/{id}/end:
+    post:
+      description: End a live room (owner or admin)
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: End live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/products:
+    get:
+      parameters:
+      - description: LiveRoom ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.LiveRoomProduct'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List live room products
+      tags:
+      - liveroom
+    post:
+      consumes:
+      - application/json
+      description: Attach products (allowed in scheduled and live). Reject if any
+        product already attached.
+      parameters:
+      - description: LiveRoom ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product IDs
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/liveRoom.AttachProductsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Attach products to live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/products/{productId}:
+    delete:
+      parameters:
+      - description: LiveRoom ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product ID (uuid)
+        in: path
+        name: productId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: string
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Detach product from live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/products/{productId}/pin:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: LiveRoom ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Product ID (uuid)
+        in: path
+        name: productId
+        required: true
+        type: string
+      - description: Pin toggle
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/liveRoom.PinProductInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Pin/unpin a product in live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/products/reorder:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: LiveRoom ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Reorder data
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/liveRoom.ReorderProductsInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Reorder products in live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/reactions:
+    delete:
+      description: Remove like/dislike for current user. Broadcasts realtime counts
+        if room is live.
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/liveRoom.ReactionSummary'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Clear reaction
+      tags:
+      - liveroom
+  /live-rooms/{id}/reactions/dislike:
+    post:
+      description: Auth user dislikes the live room (removes like if exists). Broadcasts
+        realtime counts if room is live.
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/liveRoom.ReactionSummary'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Dislike a live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/reactions/like:
+    post:
+      description: Auth user likes the live room (removes dislike if exists). Broadcasts
+        realtime counts if room is live.
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/liveRoom.ReactionSummary'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Like a live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/reactions/me:
+    get:
+      description: Get current user's reaction (like/dislike/none)
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: My reaction
+      tags:
+      - liveroom
+  /live-rooms/{id}/reactions/summary:
+    get:
+      description: Public reactions count
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/liveRoom.ReactionSummary'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Reactions summary
+      tags:
+      - liveroom
+  /live-rooms/{id}/start:
+    post:
+      description: Start a scheduled live room (owner or admin)
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Start live room
+      tags:
+      - liveroom
+  /live-rooms/{id}/stats:
+    get:
+      description: Public stats (viewer_count realtime + totals from DB)
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Live room stats
+      tags:
+      - liveroom
+  /live-rooms/{id}/view/ping:
+    post:
+      consumes:
+      - application/json
+      description: Keep viewer alive for realtime viewer_count (public)
+      parameters:
+      - description: Live room id (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: viewer key
+        in: body
+        name: input
+        required: true
+        schema:
+          $ref: '#/definitions/liveRoom.ViewPingInput'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Viewer ping
+      tags:
+      - liveroom
   /media/{id}:
     delete:
       description: Deletes a media file by ID. Only the product owner can delete media.
@@ -2026,4 +3187,40 @@ paths:
       summary: Update user profile
       tags:
       - Profile
+  /ws/live-rooms/{id}/chat:
+    get:
+      description: Authenticated realtime chat for a live room
+      parameters:
+      - description: LiveRoom ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: LiveRoom chat websocket
+      tags:
+      - liveroom
+  /ws/live-rooms/{id}/events:
+    get:
+      description: Subscribe to live room public events (products updates etc.)
+      parameters:
+      - description: LiveRoom ID (uuid)
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "101":
+          description: Switching Protocols
+          schema:
+            type: string
+      summary: LiveRoom events websocket
+      tags:
+      - liveroom
 swagger: "2.0"
