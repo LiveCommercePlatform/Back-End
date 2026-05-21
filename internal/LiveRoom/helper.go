@@ -152,3 +152,7 @@ func publishReactionsIfLive(roomID uuid.UUID, likes int64, dislikes int64) {
 
 	EventsHub.Broadcast(roomID, ev)
 }
+
+func generateViewerID() string {
+	return uuid.New().String()
+}

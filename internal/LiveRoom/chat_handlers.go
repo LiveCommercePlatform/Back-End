@@ -9,12 +9,14 @@ import (
 	"strings"
 	"time"
 
+	"livecommerce/internal/auth"
 	"livecommerce/internal/cache"
 	"livecommerce/internal/database"
 	"livecommerce/internal/models"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
 	"gorm.io/gorm"
 )
 
@@ -26,6 +28,8 @@ const (
 	chatMaxMessageSize = 4096
 	chatHistoryMaxKeep = 200
 )
+
+
 
 func chatKey(roomID uuid.UUID) string {
 	return fmt.Sprintf("live:%s:chat", roomID.String())
@@ -54,6 +58,32 @@ func loadRoomLiveOnly(c *gin.Context, roomID uuid.UUID) (*models.LiveRoom, bool)
 	return &lr, true
 }
 
+
+func mustGetAuthFromRequest(r *http.Request) (uuid.UUID, string, bool) {
+	cookie, err := r.Cookie(auth.WSAccessTokenCookieName)
+	if err != nil {
+		return uuid.Nil, "", false
+	}
+
+	token := strings.TrimSpace(cookie.Value)
+	if token == "" {
+		return uuid.Nil, "", false
+	}
+
+	claims, err := auth.ParseAccessToken(token)
+	if err != nil {
+		return uuid.Nil, "", false
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return uuid.Nil, "", false
+	}
+
+	return userID, token, true
+}
+
+
 // WSChat godoc
 // @Summary LiveRoom chat websocket
 // @Description Authenticated realtime chat for a live room
@@ -64,19 +94,9 @@ func loadRoomLiveOnly(c *gin.Context, roomID uuid.UUID) (*models.LiveRoom, bool)
 // @Router /ws/live-rooms/{id}/chat [get]
 func WSChat() gin.HandlerFunc {
 	return func(c *gin.Context) {
+
 		roomID, ok := parseUUIDParam(c, "id")
 		if !ok {
-			return
-		}
-
-		// auth required
-		userID, _, ok := mustGetAuth(c)
-		if !ok {
-			return
-		}
-
-		// live-only policy
-		if _, ok := loadRoomLiveOnly(c, roomID); !ok {
 			return
 		}
 
@@ -84,23 +104,65 @@ func WSChat() gin.HandlerFunc {
 		if err != nil {
 			return
 		}
+		defer conn.Close()
 
+		userID, _, ok := mustGetAuthFromRequest(c.Request)
+		if !ok {
+			_ = conn.WriteControl(
+				websocket.CloseMessage,
+				websocket.FormatCloseMessage(4401, "unauthorized"),
+				time.Now().Add(time.Second),
+			)
+			return
+		}
+
+		if _, ok := loadRoomLiveOnly(c, roomID); !ok {
+			return
+		}
+
+		var user models.User
+		if err := database.DB.
+			Select("id,name").
+			First(&user, "id = ?", userID).Error; err != nil {
+			return
+		}
+
+		userName := user.Name
+
+		if ChatEventsHub == nil {
+			ChatEventsHub = NewChatHub()
+		}
 
 		client := &chatClient{conn: conn}
 		ChatEventsHub.Add(roomID, client)
+
 		defer func() {
 			ChatEventsHub.Remove(roomID, client)
 			client.close()
 		}()
 
+		key := chatKey(roomID)
+
+		history, err := cache.Client.
+			LRange(c, key, 0, chatHistoryMaxKeep-1).
+			Result()
+
+		if err == nil {
+			for i := len(history) - 1; i >= 0; i-- {
+				conn.WriteMessage(websocket.TextMessage, []byte(history[i]))
+			}
+		}
+
 		conn.SetReadLimit(chatMaxMessageSize)
+
 		_ = conn.SetReadDeadline(time.Now().Add(chatPongWait))
+
 		conn.SetPongHandler(func(string) error {
 			return conn.SetReadDeadline(time.Now().Add(chatPongWait))
 		})
 
-		// ping loop
 		done := make(chan struct{})
+
 		go func() {
 			ticker := time.NewTicker(chatPingPeriod)
 			defer ticker.Stop()
@@ -113,8 +175,8 @@ func WSChat() gin.HandlerFunc {
 			}
 		}()
 
-		// read loop
 		for {
+
 			_, b, err := conn.ReadMessage()
 			if err != nil {
 				<-done
@@ -122,23 +184,18 @@ func WSChat() gin.HandlerFunc {
 			}
 
 			var in chatIncoming
+
 			if err := json.Unmarshal(b, &in); err != nil {
-				_ = client.writeJSON(chatError{Type: "chat.error", Error: "invalid_json", TS: time.Now().Unix()})
 				continue
 			}
 
 			if in.Type != "chat.send" {
-				_ = client.writeJSON(chatError{Type: "chat.error", Error: "unsupported_type", TS: time.Now().Unix()})
 				continue
 			}
 
 			text := strings.TrimSpace(in.Text)
-			if text == "" {
-				_ = client.writeJSON(chatError{Type: "chat.error", Error: "empty_text", TS: time.Now().Unix()})
-				continue
-			}
-			if len(text) > 500 {
-				_ = client.writeJSON(chatError{Type: "chat.error", Error: "text_too_long", TS: time.Now().Unix()})
+
+			if text == "" || len(text) > 500 {
 				continue
 			}
 
@@ -149,42 +206,30 @@ func WSChat() gin.HandlerFunc {
 				Type:   "chat.message",
 				RoomID: roomID.String(),
 				Data: chatMessageData{
-					ID:     msgID,
-					UserID: userID.String(),
-					Text:   text,
-					TS:     now,
+					ID:       msgID,
+					UserID:   userID.String(),
+					UserName: userName,
+					Text:     text,
+					TS:       now,
 				},
 				TS: now,
 			}
 
-			// persist in redis (best-effort)
 			raw, _ := json.Marshal(ev)
-			key := chatKey(roomID)
-
-			// ✅ درست: context.Context از request
-			ctx := c.Request.Context()
 
 			pipe := cache.Client.Pipeline()
-			pipe.LPush(ctx, key, raw)
-			pipe.LTrim(ctx, key, 0, chatHistoryMaxKeep-1)
-			pipe.Expire(ctx, key, 24*time.Hour)
-			_, _ = pipe.Exec(ctx)
 
-			// broadcast to room
+			pipe.LPush(c, key, raw)
+			pipe.LTrim(c, key, 0, chatHistoryMaxKeep-1)
+			pipe.Expire(c, key, 24*time.Hour)
+
+			_, _ = pipe.Exec(c)
+
 			ChatEventsHub.Broadcast(roomID, ev)
-
-			// ack to sender if client_msg_id provided
-			if strings.TrimSpace(in.ClientMsgID) != "" {
-				_ = client.writeJSON(chatAck{
-					Type:        "chat.ack",
-					ClientMsgID: in.ClientMsgID,
-					ID:          msgID,
-					TS:          time.Now().Unix(),
-				})
-			}
 		}
 	}
 }
+
 
 // GetChatHistory godoc
 // @Summary Chat history

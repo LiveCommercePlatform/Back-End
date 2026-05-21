@@ -12,6 +12,7 @@ import (
 type wsClient struct {
 	conn *websocket.Conn
 	mu   sync.Mutex 
+	Meta map[string]string
 }
 
 func (c *wsClient) write(msgType int, data []byte) error {

@@ -72,6 +72,7 @@ type chatIncoming struct {
 type chatMessageData struct {
 	ID     string `json:"id"`
 	UserID string `json:"user_id"`
+	UserName string `json:"user_name"`
 	Text   string `json:"text"`
 	TS     int64  `json:"ts"`
 }

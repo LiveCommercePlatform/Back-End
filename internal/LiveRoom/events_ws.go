@@ -43,7 +43,9 @@ func WSLiveRoomEvents(hub *RoomHub) gin.HandlerFunc {
 			return
 		}
 
-		client := &wsClient{conn: conn}
+		client := &wsClient{
+    conn: conn,
+    Meta: map[string]string{}, }
 
 		hub.Add(roomID, client)
 		defer func() {
