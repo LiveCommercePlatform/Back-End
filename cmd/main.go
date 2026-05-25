@@ -1,28 +1,32 @@
 package main
 
 import (
-    "context"
-    "fmt"
-    "log"
-    "net/http"
-    "os"
-    "os/signal"
-    "time"
+	"context"
+	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"time"
 
-    "livecommerce/docs"
-    liveRoom "livecommerce/internal/LiveRoom"
-    "livecommerce/internal/auth"
-    "livecommerce/internal/cache"
-    "livecommerce/internal/config"
-    "livecommerce/internal/database"
-    "livecommerce/internal/models"
-    "livecommerce/internal/product"
-    "livecommerce/internal/seeds"
-    "livecommerce/internal/syncer"
+	"livecommerce/docs"
+	liveRoom "livecommerce/internal/LiveRoom"
+	"livecommerce/internal/admin"
+	"livecommerce/internal/auth"
+	"livecommerce/internal/cache"
+	"livecommerce/internal/config"
+	"livecommerce/internal/database"
+	"livecommerce/internal/message"
+	"livecommerce/internal/models"
+	"livecommerce/internal/order"
+	"livecommerce/internal/product"
+	"livecommerce/internal/report"
+	"livecommerce/internal/seeds"
+	"livecommerce/internal/syncer"
 
-    "github.com/gin-gonic/gin"
-    swaggerFiles "github.com/swaggo/files"
-    ginSwagger "github.com/swaggo/gin-swagger"
+	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -43,6 +47,10 @@ func main() {
         &models.ProductReport{},
         &models.LiveRoom{},
         &models.LiveRoomProduct{},
+        &models.Order{},
+        &models.OrderItem{},
+        &models.Report{},
+        &models.Message{},
     ); err != nil {
         log.Fatal(err)
     }
@@ -171,6 +179,70 @@ func main() {
         lr.PATCH("/:id/products/:productId/pin", auth.AuthMiddleware(""), liveRoom.PinProduct)
         lr.PATCH("/:id/products/reorder", auth.AuthMiddleware(""), liveRoom.ReorderProducts)
     }
+
+
+    // --------------------
+// Orders
+// --------------------
+orderRoutes := r.Group("/orders")
+{
+    orderRoutes.POST("",
+        auth.AuthMiddleware(""),
+        auth.RequireProfileCompleted(),
+        order.CreateOrder,
+    )
+    orderRoutes.GET("",
+        auth.AuthMiddleware(""),
+        order.ListMyOrders,
+    )
+    orderRoutes.GET("/:id",
+        auth.AuthMiddleware(""),
+        order.GetOrderByID,
+    )
+    orderRoutes.PATCH("/:id/cancel",
+        auth.AuthMiddleware(""),
+        order.CancelOrder,
+    )
+}
+
+// --------------------
+// Reports (public create, admin manage)
+// --------------------
+r.POST("/reports", auth.AuthMiddleware(""), report.CreateReport)
+
+// --------------------
+// Messages (public send)
+// --------------------
+r.POST("/messages", message.SendMessage)
+
+// --------------------
+// Admin
+// --------------------
+adminRoutes := r.Group("/admin", auth.AuthMiddleware("admin"))
+{
+    // Orders
+    adminRoutes.GET("/orders",       order.AdminListOrders)
+    adminRoutes.PATCH("/orders/:id/status", order.AdminUpdateOrderStatus)
+
+    // Reports
+    adminRoutes.GET("/reports",            report.AdminListReports)
+    adminRoutes.PATCH("/reports/:id/status", report.AdminUpdateReportStatus)
+    adminRoutes.DELETE("/reports/:id",       report.AdminDeleteReport)
+    adminRoutes.POST("/reports/:id/ban-user", report.AdminBanUserFromReport)
+
+    // Messages
+    adminRoutes.GET("/messages",           message.AdminListMessages)
+    adminRoutes.PATCH("/messages/:id/read", message.AdminMarkMessageRead)
+    adminRoutes.DELETE("/messages/:id",     message.AdminDeleteMessage)
+
+    // Users
+    adminRoutes.GET("/users",          admin.AdminListUsers)
+    adminRoutes.GET("/users/:id",      admin.AdminGetUser)
+    adminRoutes.PATCH("/users/:id/ban",   admin.AdminBanUser)
+    adminRoutes.PATCH("/users/:id/unban", admin.AdminUnbanUser)
+    adminRoutes.DELETE("/users/:id",      admin.AdminDeleteUser)
+}
+
 
     // Syncer + graceful shutdown
     ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
