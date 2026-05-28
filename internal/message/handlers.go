@@ -11,12 +11,12 @@ import (
 )
 
 // ─── SendMessage godoc
-// @Summary      ارسال پیام تماس با ما
-// @Description  هر کسی (بدون نیاز به لاگین) می‌تونه پیام بفرسته
+// @Summary      Send contact message
+// @Description  Allows anyone to send a contact/support message
 // @Tags         messages
 // @Accept       json
 // @Produce      json
-// @Param        input body SendMessageInput true "اطلاعات پیام"
+// @Param        input body SendMessageInput true "Message information"
 // @Success      201 {object} models.Message
 // @Failure      400 {object} map[string]string
 // @Router       /messages [post]
@@ -43,12 +43,13 @@ func SendMessage(c *gin.Context) {
 }
 
 // ─── AdminListMessages godoc
-// @Summary      لیست پیام‌ها (admin)
+// @Summary      List messages (admin)
+// @Description  Returns paginated contact messages with optional status filtering
 // @Tags         admin
 // @Produce      json
-// @Param        status    query string false "وضعیت: unread | read"
-// @Param        page      query int    false "صفحه"
-// @Param        page_size query int    false "تعداد"
+// @Param        status    query string false "Message status: unread | read"
+// @Param        page      query int    false "Page number"
+// @Param        page_size query int    false "Items per page"
 // @Success      200 {object} map[string]interface{}
 // @Security     BearerAuth
 // @Router       /admin/messages [get]
@@ -84,7 +85,8 @@ func AdminListMessages(c *gin.Context) {
 }
 
 // ─── AdminMarkMessageRead godoc
-// @Summary      علامت‌گذاری پیام به عنوان خوانده‌شده (admin)
+// @Summary      Mark message as read (admin)
+// @Description  Updates message status to read
 // @Tags         admin
 // @Produce      json
 // @Param        id path int true "Message ID"
@@ -111,7 +113,8 @@ func AdminMarkMessageRead(c *gin.Context) {
 }
 
 // ─── AdminDeleteMessage godoc
-// @Summary      حذف پیام (admin)
+// @Summary      Delete message (admin)
+// @Description  Deletes a contact message permanently
 // @Tags         admin
 // @Produce      json
 // @Param        id path int true "Message ID"

@@ -12,12 +12,12 @@ import (
 )
 
 // ─── CreateReport godoc
-// @Summary      ثبت گزارش تخلف
-// @Description  کاربر می‌تونه محصول، کامنت، یا کاربر دیگه‌ای رو گزارش بده
+// @Summary      Create a report
+// @Description  Allows users to report a product, comment, or another user
 // @Tags         reports
 // @Accept       json
 // @Produce      json
-// @Param        input body CreateReportInput true "اطلاعات گزارش"
+// @Param        input body CreateReportInput true "Report information"
 // @Success      201 {object} models.Report
 // @Failure      400 {object} map[string]string
 // @Failure      401 {object} map[string]string
@@ -69,13 +69,14 @@ func CreateReport(c *gin.Context) {
 }
 
 // ─── AdminListReports godoc
-// @Summary      لیست گزارش‌ها (admin)
+// @Summary      List reports (admin)
+// @Description  Returns paginated reports with optional filters
 // @Tags         admin
 // @Produce      json
-// @Param        type      query string false "نوع: product | comment | user"
-// @Param        status    query string false "وضعیت: new | reviewing | closed"
-// @Param        page      query int    false "صفحه"
-// @Param        page_size query int    false "تعداد"
+// @Param        type      query string false "Report type: product | comment | user"
+// @Param        status    query string false "Report status: new | reviewing | closed"
+// @Param        page      query int    false "Page number"
+// @Param        page_size query int    false "Items per page"
 // @Success      200 {object} map[string]interface{}
 // @Failure      403 {object} map[string]string
 // @Security     BearerAuth
@@ -115,12 +116,13 @@ func AdminListReports(c *gin.Context) {
 }
 
 // ─── AdminUpdateReportStatus godoc
-// @Summary      آپدیت وضعیت گزارش (admin)
+// @Summary      Update report status (admin)
+// @Description  Updates the status of a report
 // @Tags         admin
 // @Accept       json
 // @Produce      json
-// @Param        id   path string true "Report ID"
-// @Param        body body UpdateReportStatusInput true "وضعیت جدید"
+// @Param        id   path string              true "Report ID"
+// @Param        body body UpdateReportStatusInput true "New report status"
 // @Success      200 {object} models.Report
 // @Failure      400 {object} map[string]string
 // @Security     BearerAuth
@@ -149,7 +151,8 @@ func AdminUpdateReportStatus(c *gin.Context) {
 }
 
 // ─── AdminDeleteReport godoc
-// @Summary      حذف گزارش (admin)
+// @Summary      Delete report (admin)
+// @Description  Deletes a report permanently
 // @Tags         admin
 // @Produce      json
 // @Param        id path int true "Report ID"
@@ -173,8 +176,8 @@ func AdminDeleteReport(c *gin.Context) {
 }
 
 // ─── AdminBanUserFromReport godoc
-// @Summary      بن کردن کاربر از طریق گزارش (admin)
-// @Description  target_user_id گزارش رو بن می‌کنه و گزارش رو می‌بنده
+// @Summary      Ban user from report (admin)
+// @Description  Bans the target user referenced in the report and closes the report
 // @Tags         admin
 // @Produce      json
 // @Param        id path int true "Report ID"

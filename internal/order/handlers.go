@@ -16,12 +16,12 @@ import (
 
 
 // ─── CreateOrder godoc
-// @Summary      Create New Orders
-// @Description  آیتم‌های سبد خرید رو می‌گیره، موجودی رو چک می‌کنه، سفارش می‌سازه
+// @Summary      Create a new order
+// @Description  Creates an order from cart items after validating stock availability
 // @Tags         orders
 // @Accept       json
 // @Produce      json
-// @Param        input body CreateOrderInput true "آیتم‌های سفارش"
+// @Param        input body CreateOrderInput true "Order items"
 // @Success      201 {object} models.Order
 // @Failure      400 {object} map[string]string
 // @Failure      401 {object} map[string]string
@@ -130,11 +130,12 @@ func CreateOrder(c *gin.Context) {
 }
 
 // ─── ListMyOrders godoc
-// @Summary      
+// @Summary      List current user's orders
+// @Description  Returns paginated orders for the authenticated user
 // @Tags         orders
 // @Produce      json
-// @Param        page      query int false "صفحه (پیش‌فرض 1)"
-// @Param        page_size query int false "تعداد (پیش‌فرض 10)"
+// @Param        page      query int false "Page number (default: 1)"
+// @Param        page_size query int false "Items per page (default: 10)"
 // @Success      200 {object} map[string]interface{}
 // @Failure      401 {object} map[string]string
 // @Security     BearerAuth
@@ -174,7 +175,8 @@ func ListMyOrders(c *gin.Context) {
 }
 
 // ─── GetOrderByID godoc
-// @Summary      جزئیات یک سفارش
+// @Summary      Get order details
+// @Description  Returns a specific order by ID
 // @Tags         orders
 // @Produce      json
 // @Param        id path string true "Order ID"
@@ -213,8 +215,8 @@ func GetOrderByID(c *gin.Context) {
 }
 
 // ─── CancelOrder godoc
-// @Summary      لغو سفارش
-// @Description  فقط سفارش‌های pending رو میشه لغو کرد
+// @Summary      Cancel an order
+// @Description  Only pending orders can be cancelled
 // @Tags         orders
 // @Produce      json
 // @Param        id path string true "Order ID"
@@ -274,12 +276,13 @@ func CancelOrder(c *gin.Context) {
 }
 
 // ─── Admin: ListAllOrders godoc
-// @Summary      لیست همه سفارش‌ها (admin)
+// @Summary      List all orders (admin)
+// @Description  Returns paginated orders with optional status filtering
 // @Tags         admin
 // @Produce      json
-// @Param        status    query string false "فیلتر وضعیت"
-// @Param        page      query int    false "صفحه"
-// @Param        page_size query int    false "تعداد"
+// @Param        status    query string false "Order status filter"
+// @Param        page      query int    false "Page number"
+// @Param        page_size query int    false "Items per page"
 // @Success      200 {object} map[string]interface{}
 // @Failure      403 {object} map[string]string
 // @Security     BearerAuth
@@ -316,12 +319,13 @@ func AdminListOrders(c *gin.Context) {
 }
 
 // ─── Admin: UpdateOrderStatus godoc
-// @Summary      آپدیت وضعیت سفارش (admin)
+// @Summary      Update order status (admin)
+// @Description  Updates the status of an order
 // @Tags         admin
 // @Accept       json
 // @Produce      json
-// @Param        id   path string                     true "Order ID"
-// @Param        body body map[string]string          true "status"
+// @Param        id   path string            true "Order ID"
+// @Param        body body map[string]string true "New status"
 // @Success      200 {object} models.Order
 // @Failure      400 {object} map[string]string
 // @Security     BearerAuth
