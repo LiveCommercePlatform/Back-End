@@ -291,6 +291,10 @@ func mapProductToListDTO(p models.Product) ProductListItemDTO {
     for _, t := range p.Tags {
         tags = append(tags, t.Name)
     }
+	var firstMediaURL string
+        if len(p.Media) > 0 {
+        firstMediaURL = p.Media[0].URL
+    }
     dto := ProductListItemDTO{
         ID:         p.ID.String(),
         Title:      p.Title,
@@ -302,6 +306,7 @@ func mapProductToListDTO(p models.Product) ProductListItemDTO {
         ViewCount:  p.ViewCount,
         LikeCount:  p.LikeCount,
         CreatedAt:  p.CreatedAt,
+		Media: firstMediaURL,
     }
     if p.Owner != nil { dto.OwnerName = p.Owner.Name }
     if p.Category != nil { dto.CategoryFa = p.Category.NameFa }

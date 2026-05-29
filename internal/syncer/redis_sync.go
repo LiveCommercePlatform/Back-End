@@ -99,9 +99,16 @@ func SyncViewsOnce(ctx context.Context, batch int64) error {
 				}
 			}
 
-			_ = db.Model(&models.Product{}).
-				Where("id = ?", pid).
-				UpdateColumn("view_count", gorm.Expr("view_count + ?", delta)).Error
+			// _ = db.Model(&models.Product{}).
+			// 	Where("id = ?", pid).
+			// 	UpdateColumn("view_count", gorm.Expr("view_count + ?", delta)).Error
+
+			if err := db.Model(&models.Product{}).
+                Where("id = ?", pid).
+                UpdateColumn("view_count", gorm.Expr("view_count + ?", delta)).Error; err != nil {
+                fmt.Printf("[sync:views] DB fail for %s, restoring delta %d: %v\n", pid, delta, err)
+                _ = rdb.IncrBy(ctx, k, delta).Err()
+            }
 		}
 
 		cursor = next
@@ -166,12 +173,25 @@ func SyncEngagementOnce(ctx context.Context, batch int64) error {
 				continue
 			}
 
-			_ = db.Model(&models.Product{}).
+			// _ = db.Model(&models.Product{}).
+			// 	Where("id = ?", pid).
+			// 	Updates(map[string]any{
+			// 		"like_count":    gorm.Expr("like_count + ?", likesDelta),
+			// 		"dislike_count": gorm.Expr("dislike_count + ?", dislikesDelta),
+			// 	}).Error
+
+
+			if err := db.Model(&models.Product{}).
 				Where("id = ?", pid).
 				Updates(map[string]any{
 					"like_count":    gorm.Expr("like_count + ?", likesDelta),
 					"dislike_count": gorm.Expr("dislike_count + ?", dislikesDelta),
-				}).Error
+				}).Error; err != nil {
+				fmt.Printf("[sync:engagement] DB fail for %s, restoring delta: %v\n", pid, err)
+				// ← برگردوندن به Redis
+				_ = rdb.HIncrBy(ctx, k, "likes_count", likesDelta).Err()
+				_ = rdb.HIncrBy(ctx, k, "dislikes_count", dislikesDelta).Err()
+				}
 		}
 
 		cursor = next
@@ -218,7 +238,19 @@ func SyncRatingsOnce(ctx context.Context, batch int64) error {
 				continue
 			}
 
-			_ = db.Model(&models.Product{}).
+			// _ = db.Model(&models.Product{}).
+			// 	Where("id = ?", pid).
+			// 	Updates(map[string]any{
+			// 		"rating_count": gorm.Expr("rating_count + ?", countDelta),
+			// 		"rating_sum":   gorm.Expr("rating_sum + ?", sumDelta),
+			// 		"rating_avg": gorm.Expr(
+			// 			"CASE WHEN (rating_count + ?) > 0 THEN (1.0 * (rating_sum + ?) / (rating_count + ?)) ELSE 0 END",
+			// 			countDelta, sumDelta, countDelta,
+			// 		),
+			// 	}).Error
+
+
+			if err := db.Model(&models.Product{}).
 				Where("id = ?", pid).
 				Updates(map[string]any{
 					"rating_count": gorm.Expr("rating_count + ?", countDelta),
@@ -227,7 +259,13 @@ func SyncRatingsOnce(ctx context.Context, batch int64) error {
 						"CASE WHEN (rating_count + ?) > 0 THEN (1.0 * (rating_sum + ?) / (rating_count + ?)) ELSE 0 END",
 						countDelta, sumDelta, countDelta,
 					),
-				}).Error
+				}).Error; err != nil {
+				fmt.Printf("[sync:ratings] DB fail for %s, restoring delta: %v\n", pid, err)
+				_ = rdb.HIncrBy(ctx, k, "count", countDelta).Err()
+				_ = rdb.HIncrBy(ctx, k, "sum", sumDelta).Err()
+			}
+
+			
 		}
 
 		cursor = next

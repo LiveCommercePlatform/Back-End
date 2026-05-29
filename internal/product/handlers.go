@@ -474,7 +474,7 @@ func SearchProducts(c *gin.Context) {
 
     q := buildProductsSearchQuery(database.DB, params)
 
-    // count total
+    q = q.Preload("Media")
     var total int64
     if err := q.Count(&total).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count products"})
@@ -526,7 +526,7 @@ func SearchProducts(c *gin.Context) {
 // @Success 200 {object} ProductSearchResponseDTO
 // @Failure 400 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /profile/{owner_id}/products [get]
+// @Router /users/{owner_id}/products [get]
 func GetOwnerProducts(c *gin.Context) {
     ownerIDStr := strings.TrimSpace(c.Param("owner_id"))
     oid, err := uuid.Parse(ownerIDStr)
@@ -543,6 +543,7 @@ func GetOwnerProducts(c *gin.Context) {
     params.OwnerID = &oid 
 
     q := buildProductsSearchQuery(database.DB, params)
+    q = q.Preload("Media").Preload("Category").Preload("Tags")
 
     var total int64
     if err := q.Count(&total).Error; err != nil {

@@ -215,7 +215,15 @@ func handleAnswer(
 	session.RemoteDescriptionSet.Store(true)
 
 	flushPendingICE(session)
+
+	if session.Room != nil {
+		forwarders := session.Room.GetForwarders()
+		for _, f := range forwarders {
+			session.Room.RequestKeyframe(f.TrackID)
+		}
+	}
 }
+
 
 func handleICECandidate(
 	session *SignalingSession,

@@ -35,9 +35,6 @@ type LiveRoom struct {
 	EndedAt   *time.Time
 
 	IsRecorded bool `gorm:"default:false"`
-
-	SFURoomID *string `gorm:"type:varchar(128);uniqueIndex"` // مثلا room UUID به string یا یک اسم داخلی
-
 	TotalViews int64 `gorm:"default:0"`
 	TotalLikes int64 `gorm:"default:0"`
 	TotalDislikes int64 `gorm:"default:0"`

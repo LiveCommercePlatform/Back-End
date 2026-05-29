@@ -105,6 +105,7 @@ type ProductListItemDTO struct {
     ViewCount  int64    `json:"view_count"`
     LikeCount  int64    `json:"like_count"`
     CreatedAt  time.Time `json:"created_at"`
+	Media      	string  `json:"media"`
 }
 
 type ProductSearchResponseDTO struct {
@@ -166,8 +167,6 @@ type ProductResponseDTO struct {
 
 	Media    []models.ProductMedia  `json:"media,omitempty"`
 	Comments []models.Comment       `json:"comments,omitempty"`
-	Reports  []models.ProductReport `json:"reports,omitempty"`
-
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
@@ -201,8 +200,6 @@ func ToProductResponseDTO(p models.Product) ProductResponseDTO {
 
 		Media:    p.Media,
 		Comments: p.Comments,
-		Reports:  p.Reports,
-
 		CreatedAt: p.CreatedAt,
 		UpdatedAt: p.UpdatedAt,
 	}
@@ -215,9 +212,6 @@ func ToProductResponseDTO(p models.Product) ProductResponseDTO {
 	}
 	if len(out.Comments) == 0 {
 		out.Comments = nil
-	}
-	if len(out.Reports) == 0 {
-		out.Reports = nil
 	}
 
 	return out

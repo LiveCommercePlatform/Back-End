@@ -35,7 +35,6 @@ type Product struct {
 
 	Media    []ProductMedia `gorm:"constraint:OnDelete:CASCADE" json:"media"`
 	Comments []Comment      `gorm:"constraint:OnDelete:CASCADE" json:"comments"`
-	Reports  []ProductReport `gorm:"constraint:OnDelete:CASCADE" json:"reports"`
 
 	CategoryID uint      `gorm:"index;not null" json:"category_id"`
 	Category   *Category `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
