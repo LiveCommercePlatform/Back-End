@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"livecommerce/internal/cache"
 	"livecommerce/internal/database"
 	"livecommerce/internal/models"
 
@@ -70,10 +71,18 @@ func CreateLiveRoom(c *gin.Context) {
 // @Router /live-rooms [get]
 func ListLiveRooms(c *gin.Context) {
 	status := strings.TrimSpace(c.Query("status"))
+	hostID := strings.TrimSpace(c.Query("host_id"))
 
-	q := database.DB.Model(&models.LiveRoom{}).Order("created_at desc")
+	q := database.DB.
+		Model(&models.LiveRoom{}).
+		Preload("Host").
+		Order("created_at desc")
 	if status != "" {
 		q = q.Where("status = ?", status)
+	}
+
+	if hostID != "" {
+		q = q.Where("host_id = ?", hostID)
 	}
 
 	var rooms []models.LiveRoom
@@ -336,15 +345,21 @@ func EndLive(c *gin.Context) {
 		duration = int64(now.Sub(*lr.StartedAt).Seconds())
 	}
 
+	ctx := c.Request.Context()
+	likes, _ := cache.Client.SCard(ctx, likesKey(lr.ID)).Result()
+	dislikes, _ := cache.Client.SCard(ctx, dislikesKey(lr.ID)).Result()
+
 	if err := database.DB.Model(&lr).Updates(map[string]any{
 		"status":   models.LiveEnded,
 		"ended_at": &now,
 		"duration": duration,
+		"total_likes":   likes,    
+    	"total_dislikes": dislikes,
 	}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_end_live"})
 		return
 	}
-
+	cache.Client.Del(ctx, likesKey(lr.ID), dislikesKey(lr.ID))
 	DestroySFURoom(id)
 	c.JSON(http.StatusOK, gin.H{"message": "live_ended"})
 }

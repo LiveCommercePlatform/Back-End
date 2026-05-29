@@ -44,7 +44,6 @@ func main() {
         &models.Product{},
         &models.ProductMedia{},
         &models.Comment{},
-        &models.ProductReport{},
         &models.LiveRoom{},
         &models.LiveRoomProduct{},
         &models.Order{},

@@ -355,7 +355,7 @@ func ResetPassword(c *gin.Context) {
 // @Failure 401 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Security BearerAuth
-// @Router /auth/change-password [patch]
+// @Router /auth/change-password [post]
 func ChangePassword(c *gin.Context) {
 	userID, ok := mustGetUserID(c)
 	if !ok {

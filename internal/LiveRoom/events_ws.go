@@ -17,7 +17,7 @@ var upgrader = websocket.Upgrader{
 const (
 	pongWait       = 60 * time.Second
 	pingPeriod     = (pongWait * 9) / 10
-	maxMessageSize = 1024
+	maxMessageSize = 262144  
 )
 
 
