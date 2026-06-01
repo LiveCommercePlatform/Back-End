@@ -35,12 +35,6 @@ func CreateReport(c *gin.Context) {
 		return
 	}
 
-	// چک کن که target ID داده شده
-	if input.ProductID == nil && input.CommentID == nil && input.TargetUserID == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "at_least_one_target_required"})
-		return
-	}
-
 	report := models.Report{
 		ReporterID: reporterID,
 		Type:       models.ReportType(input.Type),
@@ -48,16 +42,57 @@ func CreateReport(c *gin.Context) {
 		Reason:     input.Reason,
 	}
 
-	if input.ProductID != nil {
-		id, _ := uuid.Parse(*input.ProductID)
-		report.ProductID = &id
+	switch input.Type {
+	case "product":
+		if input.ProductID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "product_id_required"})
+			return
+		}
+		if *input.ProductID == uuid.Nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_product_id"})
+			return
+		}
+		if input.CommentID != nil || input.TargetUserID != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "only_product_id_allowed_for_product_type"})
+			return
+		}
+		report.ProductID = input.ProductID
+
+	case "comment":
+	if input.CommentID == nil || *input.CommentID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "comment_id_required"})
+		return
 	}
-	if input.CommentID != nil {
-		report.CommentID = input.CommentID
-	}
+
 	if input.TargetUserID != nil {
-		id, _ := uuid.Parse(*input.TargetUserID)
-		report.TargetUserID = &id
+		c.JSON(http.StatusBadRequest, gin.H{"error": "target_user_id_not_allowed_for_comment_type"})
+		return
+	}
+
+	report.CommentID = input.CommentID
+
+	if input.ProductID != nil {
+		if *input.ProductID == uuid.Nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_product_id"})
+			return
+		}
+		report.ProductID = input.ProductID
+	}
+
+	case "user":
+		if input.TargetUserID == nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "target_user_id_required"})
+			return
+		}
+		if *input.TargetUserID == uuid.Nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_target_user_id"})
+			return
+		}
+		if input.ProductID != nil || input.CommentID != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "only_target_user_id_allowed_for_user_type"})
+			return
+		}
+		report.TargetUserID = input.TargetUserID
 	}
 
 	if err := database.DB.Create(&report).Error; err != nil {
@@ -67,6 +102,7 @@ func CreateReport(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, report)
 }
+
 
 // ─── AdminListReports godoc
 // @Summary      List reports (admin)

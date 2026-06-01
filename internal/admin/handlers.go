@@ -169,3 +169,57 @@ func AdminDeleteUser(c *gin.Context) {
 
 	c.Status(http.StatusNoContent)
 }
+
+func AdminPromoteUser(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(400, gin.H{"error": "invalid_id"})
+		return
+	}
+
+	var user models.User
+	if err := database.DB.First(&user, "id = ?", id).Error; err != nil {
+		c.JSON(404, gin.H{"error": "user_not_found"})
+		return
+	}
+
+	if user.Role == models.RoleAdmin {
+		c.JSON(200, user)
+		return
+	}
+
+	if err := database.DB.Model(&user).Update("role", models.RoleAdmin).Error; err != nil {
+		c.JSON(500, gin.H{"error": "update_failed"})
+		return
+	}
+
+	user.Role = models.RoleAdmin
+	c.JSON(200, user)
+}
+
+func AdminDemoteUser(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		c.JSON(400, gin.H{"error": "invalid_id"})
+		return
+	}
+
+	var user models.User
+	if err := database.DB.First(&user, "id = ?", id).Error; err != nil {
+		c.JSON(404, gin.H{"error": "user_not_found"})
+		return
+	}
+
+	if user.Role == models.RoleUser {
+		c.JSON(200, user)
+		return
+	}
+
+	if err := database.DB.Model(&user).Update("role", models.RoleUser).Error; err != nil {
+		c.JSON(500, gin.H{"error": "update_failed"})
+		return
+	}
+
+	user.Role = models.RoleUser
+	c.JSON(200, user)
+}

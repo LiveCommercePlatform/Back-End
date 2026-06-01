@@ -114,6 +114,7 @@ func GetLiveRoomByID(c *gin.Context) {
 	err := database.DB.
 		Preload("Host").
 		Preload("Products").
+		Preload("Products.Product").
 		First(&lr, "id = ?", id).Error
 
 	if err != nil {
