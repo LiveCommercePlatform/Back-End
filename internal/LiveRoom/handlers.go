@@ -348,6 +348,8 @@ func EndLive(c *gin.Context) {
 	ctx := c.Request.Context()
 	likes, _ := cache.Client.SCard(ctx, likesKey(lr.ID)).Result()
 	dislikes, _ := cache.Client.SCard(ctx, dislikesKey(lr.ID)).Result()
+	uniqueViews, _ := cache.Client.PFCount(ctx, uniqueViewersKey(lr.ID)).Result()
+
 
 	if err := database.DB.Model(&lr).Updates(map[string]any{
 		"status":   models.LiveEnded,
@@ -355,11 +357,13 @@ func EndLive(c *gin.Context) {
 		"duration": duration,
 		"total_likes":   likes,    
     	"total_dislikes": dislikes,
+		"total_views":     uniqueViews,
 	}).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed_to_end_live"})
 		return
 	}
-	cache.Client.Del(ctx, likesKey(lr.ID), dislikesKey(lr.ID))
+	cache.Client.Del(ctx, likesKey(lr.ID), dislikesKey(lr.ID),viewersZKey(lr.ID),uniqueViewersKey(lr.ID),)
+	go persistChatHistory(lr.ID)
 	DestroySFURoom(id)
 	c.JSON(http.StatusOK, gin.H{"message": "live_ended"})
 }

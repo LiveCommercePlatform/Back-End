@@ -22,7 +22,9 @@ import (
 func viewersZKey(roomID uuid.UUID) string {
 	return fmt.Sprintf("live:%s:viewers_z", roomID.String())
 }
-
+func uniqueViewersKey(roomID uuid.UUID) string {
+    return fmt.Sprintf("live:%s:unique_viewers", roomID.String())
+}
 
 
 // ViewPing godoc
@@ -83,6 +85,8 @@ func ViewPing(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
 		return
 	}
+
+	cache.Client.PFAdd(ctx, uniqueViewersKey(roomID), viewerKey)
 	cnt, err := getViewerCount(c, roomID, ttlSeconds)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
@@ -109,7 +113,7 @@ func LiveRoomStats(c *gin.Context) {
 	}
 
 	var lr models.LiveRoom
-	if err := database.DB.Select("id,total_views,total_likes,total_dislikes").
+    if err := database.DB.Select("id,status,total_views,total_likes,total_dislikes").
 		First(&lr, "id = ?", roomID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "live_room_not_found"})
@@ -118,7 +122,7 @@ func LiveRoomStats(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db_error"})
 		return
 	}
-
+	ctx := c.Request.Context()
 	ttlSeconds := 20
 	cnt, err := getViewerCount(c, roomID, ttlSeconds)
 	if err != nil {
@@ -126,11 +130,20 @@ func LiveRoomStats(c *gin.Context) {
 		return
 	}
 
+	var likes, dislikes int64
+    if lr.Status == models.LiveLive {
+        likes, _ = cache.Client.SCard(ctx, likesKey(roomID)).Result()
+        dislikes, _ = cache.Client.SCard(ctx, dislikesKey(roomID)).Result()
+    } else {
+        likes = lr.TotalLikes
+        dislikes = lr.TotalDislikes
+    }
+
 	c.JSON(200, gin.H{
 	"viewer_count": cnt,
 	"total_views": lr.TotalViews,
-	"total_likes": lr.TotalLikes,
-	"total_dislikes": lr.TotalDislikes,
+    "total_likes":    likes,
+    "total_dislikes": dislikes,
 	})
 }
 
