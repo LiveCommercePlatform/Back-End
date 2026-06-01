@@ -192,6 +192,7 @@ func main() {
 // --------------------
 orderRoutes := r.Group("/orders")
 {
+    orderRoutes.GET("/all",       order.AdminListOrders)
     orderRoutes.POST("",
         auth.AuthMiddleware(""),
         auth.RequireProfileCompleted(),
@@ -227,7 +228,6 @@ r.POST("/messages", message.SendMessage)
 adminRoutes := r.Group("/admin", auth.AuthMiddleware("admin"))
 {
     // Orders
-    adminRoutes.GET("/orders",       order.AdminListOrders)
     adminRoutes.PATCH("/orders/:id/status", order.AdminUpdateOrderStatus)
 
     // Reports

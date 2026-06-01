@@ -52,10 +52,11 @@ func ViewPing(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "db_error"})
 		return
 	}
+
 	if lr.Status != models.LiveLive {
-		c.JSON(http.StatusConflict, gin.H{"error":"live_room_not_live"})
+		c.JSON(http.StatusConflict, gin.H{"error": "live_room_not_live"})
 		return
-		}
+	}
 
 	var in ViewPingInput
 	if err := c.ShouldBindJSON(&in); err != nil {
@@ -72,9 +73,8 @@ func ViewPing(c *gin.Context) {
 	ttlSeconds := 20
 	expiresAt := time.Now().Unix() + int64(ttlSeconds)
 
-	key := viewersZKey(roomID)
-
 	ctx := c.Request.Context()
+	key := viewersZKey(roomID)
 
 	if err := cache.Client.ZAdd(ctx, key, redis.Z{
 		Score:  float64(expiresAt),
@@ -83,14 +83,27 @@ func ViewPing(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
 		return
 	}
+
 	cnt, err := getViewerCount(c, roomID, ttlSeconds)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"viewer_count": cnt})
+	likes, err1 := cache.Client.SCard(ctx, likesKey(roomID)).Result()
+	dislikes, err2 := cache.Client.SCard(ctx, dislikesKey(roomID)).Result()
+	if err1 != nil || err2 != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"viewer_count": cnt,
+		"likes":        likes,
+		"dislikes":     dislikes,
+	})
 }
+
 
 // LiveRoomStats godoc
 // @Summary Live room stats
