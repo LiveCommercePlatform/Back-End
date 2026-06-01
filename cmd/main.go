@@ -25,6 +25,7 @@ import (
 	"livecommerce/internal/syncer"
 
 	"github.com/gin-gonic/gin"
+    "github.com/gin-contrib/cors"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -63,6 +64,12 @@ func main() {
     liveRoom.InitChatHub()  // ← اضافه شد
 
     r := gin.Default()
+    r.Use(cors.New(cors.Config{
+	AllowOrigins:     []string{"http://localhost:3000"},
+	AllowMethods:     []string{"GET", "POST", "PUT", "DELETE","PATCH", "OPTIONS"},
+	AllowHeaders:     []string{"Origin", "Content-Type", "Authorization"},
+	AllowCredentials: true,
+	}))
     r.Static("/uploads", "./uploads")
     r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
@@ -240,6 +247,9 @@ adminRoutes := r.Group("/admin", auth.AuthMiddleware("admin"))
     adminRoutes.PATCH("/users/:id/ban",   admin.AdminBanUser)
     adminRoutes.PATCH("/users/:id/unban", admin.AdminUnbanUser)
     adminRoutes.DELETE("/users/:id",      admin.AdminDeleteUser)
+
+    adminRoutes.PATCH("/users/:id/promote", admin.AdminPromoteUser)
+    adminRoutes.PATCH("/users/:id/demote", admin.AdminDemoteUser)
 }
 
 
