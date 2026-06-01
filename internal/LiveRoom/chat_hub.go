@@ -70,6 +70,12 @@ func (h *ChatHub) Remove(roomID uuid.UUID, cl *chatClient) {
 }
 
 func (h *ChatHub) Broadcast(roomID uuid.UUID, payload any) {
+	// یه‌بار marshal کن — نه به ازای هر client
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
 	// snapshot
 	h.mu.RLock()
 	roomConns, ok := h.rooms[roomID]
@@ -83,10 +89,21 @@ func (h *ChatHub) Broadcast(roomID uuid.UUID, payload any) {
 	}
 	h.mu.RUnlock()
 
+	var wg sync.WaitGroup
 	for _, cl := range clients {
-		if err := cl.writeJSON(payload); err != nil {
-			h.Remove(roomID, cl)
-			cl.close()
-		}
+		wg.Add(1)
+		go func(c *chatClient) {
+			defer wg.Done()
+			c.mu.Lock()
+			_ = c.conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
+			err := c.conn.WriteMessage(websocket.TextMessage, b)
+			c.mu.Unlock()
+
+			if err != nil {
+				h.Remove(roomID, c)
+				c.close()
+			}
+		}(cl)
 	}
+	wg.Wait()
 }

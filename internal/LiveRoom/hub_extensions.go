@@ -8,18 +8,21 @@ import (
 )
 
 func (h *RoomHub) BroadcastToRole(roomID uuid.UUID, role string, payload any) {
+    data, _ := json.Marshal(payload)
 
-	data, _ := json.Marshal(payload)
+    h.mu.RLock()
+    conns := h.rooms[roomID]
+    clients := make([]*wsClient, 0)
+    for c := range conns {
+        if c.Meta["role"] == role {
+            clients = append(clients, c)
+        }
+    }
+    h.mu.RUnlock()  
 
-	h.mu.RLock()
-	conns := h.rooms[roomID]
-	h.mu.RUnlock()
-
-	for c := range conns {
-		if c.Meta["role"] == role {
-			c.write(websocket.TextMessage, data)
-		}
-	}
+    for _, c := range clients {
+        c.write(websocket.TextMessage, data)
+    }
 }
 
 func (h *RoomHub) BroadcastToTarget(roomID uuid.UUID, target string, payload any) {

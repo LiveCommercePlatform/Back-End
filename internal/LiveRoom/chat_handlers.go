@@ -1,6 +1,7 @@
 package liveRoom
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -231,6 +232,45 @@ func WSChat() gin.HandlerFunc {
 }
 
 
+// LiveRoom/chat_handlers.go
+func persistChatHistory(roomID uuid.UUID) {
+    ctx := context.Background()
+    key := chatKey(roomID)
+
+    items, err := cache.Client.LRange(ctx, key, 0, -1).Result()
+    if err != nil || len(items) == 0 {
+        return
+    }
+
+    var messages []models.ChatMessage
+    for _, item := range items {
+        var ev chatEvent
+        if err := json.Unmarshal([]byte(item), &ev); err != nil {
+            continue
+        }
+
+        userID, err := uuid.Parse(ev.Data.UserID)
+        if err != nil {
+            continue
+        }
+
+        messages = append(messages, models.ChatMessage{
+            RoomID:   roomID,
+            UserID:   userID,
+            UserName: ev.Data.UserName,
+            Text:     ev.Data.Text,
+            SentAt:   time.Unix(ev.Data.TS, 0),
+        })
+    }
+
+    if len(messages) > 0 {
+        database.DB.CreateInBatches(messages, 100)
+    }
+
+    cache.Client.Del(ctx, key)
+}
+
+
 // GetChatHistory godoc
 // @Summary Chat history
 // @Description Get last N chat messages (authenticated)
@@ -243,60 +283,67 @@ func WSChat() gin.HandlerFunc {
 // @Failure 400,401,404,500 {object} map[string]string
 // @Router /live-rooms/{id}/chat/history [get]
 func GetChatHistory(c *gin.Context) {
-	roomID, ok := parseUUIDParam(c, "id")
-	if !ok {
-		return
-	}
+    roomID, ok := parseUUIDParam(c, "id")
+    if !ok {
+        return
+    }
 
-	// auth required
-	if _, _, ok := mustGetAuth(c); !ok {
-		return
-	}
+    if _, _, ok := mustGetAuth(c); !ok {
+        return
+    }
 
-	// existence check
-	var lr models.LiveRoom
-	if err := database.DB.Select("id").First(&lr, "id = ?", roomID).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			c.JSON(http.StatusNotFound, gin.H{"error": "live_room_not_found"})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "db_error"})
-		return
-	}
+    var lr models.LiveRoom
+    if err := database.DB.Select("id,status").First(&lr, "id = ?", roomID).Error; err != nil {
+        if errors.Is(err, gorm.ErrRecordNotFound) {
+            c.JSON(http.StatusNotFound, gin.H{"error": "live_room_not_found"})
+            return
+        }
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "db_error"})
+        return
+    }
 
-	limit := 50
-	if s := strings.TrimSpace(c.Query("limit")); s != "" {
-		n, err := strconv.Atoi(s)
-		if err != nil || n <= 0 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_limit"})
-			return
-		}
-		if n > 200 {
-			n = 200
-		}
-		limit = n
-	}
+    limit := 50
+    if s := strings.TrimSpace(c.Query("limit")); s != "" {
+        n, err := strconv.Atoi(s)
+        if err != nil || n <= 0 {
+            c.JSON(http.StatusBadRequest, gin.H{"error": "invalid_limit"})
+            return
+        }
+        if n > 200 {
+            n = 200
+        }
+        limit = n
+    }
 
-	key := chatKey(roomID)
+    ctx := c.Request.Context()
 
-	// ✅ درست: context.Context از request
-	ctx := c.Request.Context()
+    // ← اینجا تغییر اصلیه
+    // اگه لایو تموم شده → از DB بخون
+    if lr.Status == models.LiveEnded {
+        var msgs []models.ChatMessage
+        database.DB.Where("room_id = ?", roomID).
+            Order("sent_at ASC").
+            Limit(limit).
+            Find(&msgs)
+        c.JSON(http.StatusOK, gin.H{"items": msgs, "source": "db"})
+        return
+    }
 
-	items, err := cache.Client.LRange(ctx, key, 0, int64(limit-1)).Result()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
-		return
-	}
+    // اگه هنوز live یا scheduled هست → از Redis بخون (همون کد قبلی)
+    key := chatKey(roomID)
+    items, err := cache.Client.LRange(ctx, key, 0, int64(limit-1)).Result()
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "redis_error"})
+        return
+    }
 
-	events := make([]chatEvent, 0, len(items))
-	for _, it := range items {
-		var ev chatEvent
-		if err := json.Unmarshal([]byte(it), &ev); err == nil {
-			events = append(events, ev)
-		}
-	}
+    events := make([]chatEvent, 0, len(items))
+    for _, it := range items {
+        var ev chatEvent
+        if err := json.Unmarshal([]byte(it), &ev); err == nil {
+            events = append(events, ev)
+        }
+    }
 
-	c.JSON(http.StatusOK, gin.H{
-		"items": events,
-	})
+    c.JSON(http.StatusOK, gin.H{"items": events, "source": "redis"})
 }

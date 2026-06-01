@@ -474,12 +474,12 @@ func SearchProducts(c *gin.Context) {
 
     q := buildProductsSearchQuery(database.DB, params)
 
-    q = q.Preload("Media")
     var total int64
     if err := q.Count(&total).Error; err != nil {
         c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to count products"})
         return
     }
+	q = q.Preload("Media")
 
     offset := (params.Page - 1) * params.Limit
 

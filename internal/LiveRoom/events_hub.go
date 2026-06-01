@@ -63,29 +63,34 @@ func (h *RoomHub) Remove(roomID uuid.UUID, client *wsClient) {
 }
 
 func (h *RoomHub) Broadcast(roomID uuid.UUID, payload any) {
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return
-	}
+    b, err := json.Marshal(payload)
+    if err != nil {
+        return
+    }
 
-	// snapshot
-	h.mu.RLock()
-	roomConns, ok := h.rooms[roomID]
-	if !ok || len(roomConns) == 0 {
-		h.mu.RUnlock()
-		return
-	}
-	clients := make([]*wsClient, 0, len(roomConns))
-	for c := range roomConns {
-		clients = append(clients, c)
-	}
-	h.mu.RUnlock()
+    h.mu.RLock()
+    roomConns, ok := h.rooms[roomID]
+    if !ok || len(roomConns) == 0 {
+        h.mu.RUnlock()
+        return
+    }
+    clients := make([]*wsClient, 0, len(roomConns))
+    for c := range roomConns {
+        clients = append(clients, c)
+    }
+    h.mu.RUnlock()
 
-	for _, cl := range clients {
-		if err := cl.write(websocket.TextMessage, b); err != nil {
-			// dead conn => remove + close
-			h.Remove(roomID, cl)
-			cl.close()
-		}
-	}
+    // ← هر client در goroutine جداگانه
+    var wg sync.WaitGroup
+    for _, cl := range clients {
+        wg.Add(1)
+        go func(c *wsClient) {
+            defer wg.Done()
+            if err := c.write(websocket.TextMessage, b); err != nil {
+                h.Remove(roomID, c)
+                c.close()
+            }
+        }(cl)
+    }
+    wg.Wait()
 }
