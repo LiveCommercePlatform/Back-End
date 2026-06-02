@@ -51,6 +51,7 @@ func main() {
         &models.OrderItem{},
         &models.Report{},
         &models.Message{},
+        &models.ChatMessage{},
     ); err != nil {
         log.Fatal(err)
     }
