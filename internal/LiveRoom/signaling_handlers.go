@@ -2,7 +2,6 @@ package liveRoom
 
 import (
 	"encoding/json"
-"log"
 "fmt"
 	"github.com/google/uuid"
 	"github.com/pion/webrtc/v4"
@@ -91,29 +90,7 @@ func handleJoin(
 
 	c := candidate.ToJSON()
 
-	var sdpMid string
-	if c.SDPMid == nil {
-		sdpMid = "<nil>"
-	} else {
-		sdpMid = fmt.Sprintf("%q", *c.SDPMid)
-	}
-
-	var sdpMLineIndex string
-	if c.SDPMLineIndex == nil {
-		sdpMLineIndex = "<nil>"
-	} else {
-		sdpMLineIndex = fmt.Sprintf("%d", *c.SDPMLineIndex)
-	}
-
-	var usernameFragment string
-	if c.UsernameFragment == nil {
-		usernameFragment = "<nil>"
-	} else {
-		usernameFragment = fmt.Sprintf("%q", *c.UsernameFragment)
-	}
-
-
-	sendSignal(
+		sendSignal(
 		session.Client,
 		"ice_candidate",
 		c,
